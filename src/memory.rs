@@ -23,11 +23,16 @@ const FONT_DATA: [u8; 80] = [
     0xF0, 0x80, 0xF0, 0x80, 0x80, // F
 ];
 
+#[derive(Clone, Copy, Debug)]
 pub struct MemoryAddress(u16);
 
 impl MemoryAddress {
     pub fn from_byte(value: u8) -> Self {
         MemoryAddress(value as u16)
+    }
+
+    pub fn increment(&mut self) {
+        self.0 += 1;
     }
 }
 
@@ -52,6 +57,13 @@ impl Memory {
         Memory {
             data,
         }
+    }
+
+    pub fn read_instruction(&self, address: MemoryAddress) -> u16 {
+        let upper = self.data[address.0 as usize] as u16;
+        let lower = self.data[(address.0 + 1) as usize] as u16;
+        
+        return (upper << 4) + lower;
     }
 }
 
