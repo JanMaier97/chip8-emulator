@@ -1,7 +1,8 @@
 use std::ops::{Index, IndexMut};
 
-pub const MEMORY_START: MemoryAddress = MemoryAddress(0x200);
+use crate::{bits::U4, rom::Rom};
 
+pub const MEMORY_START: MemoryAddress = MemoryAddress(0x200);
 const MEMORY_SIZE: usize = 4096;
 
 const FONT_DATA: [u8; 80] = [
@@ -32,7 +33,11 @@ impl MemoryAddress {
     }
 
     pub fn increment(&mut self) {
-        self.0 += 1;
+        self.0 += 2;
+    }
+
+    pub fn set(&mut self, value: u16) {
+        self.0 = value;
     }
 }
 
@@ -47,23 +52,44 @@ pub struct Memory {
 }
 
 impl Memory {
-    pub fn new() -> Self {
+    pub fn from_rom(rom: Rom) -> Self {
+        let rom_start = MEMORY_START.0 as usize;
+        if rom.data.len() > MEMORY_SIZE - rom_start {
+            panic!("Rom is too large")
+        }
+
         let mut data = [0; MEMORY_SIZE];
 
         for (index, value) in FONT_DATA.iter().enumerate() {
             data[index] = *value;
         }
 
-        Memory {
-            data,
+        for (index, rom_value) in rom.data.into_iter().enumerate() {
+            data[rom_start + index] = rom_value;
         }
+
+        Memory { data }
     }
 
     pub fn read_instruction(&self, address: MemoryAddress) -> u16 {
         let upper = self.data[address.0 as usize] as u16;
         let lower = self.data[(address.0 + 1) as usize] as u16;
-        
-        return (upper << 4) + lower;
+
+        return (upper << 8) + lower;
+    }
+
+    pub fn read_slice(&self, start: MemoryAddress, length: U4) -> &[u8] {
+        let start = start.0 as usize;
+        let length = *length as usize;
+        if start + length > MEMORY_SIZE {
+            panic!(
+                "Trying to access memory in range {}-{}, which is invalid",
+                start,
+                start + length
+            )
+        }
+
+        &self.data[start..start + length]
     }
 }
 
