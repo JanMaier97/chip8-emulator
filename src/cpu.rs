@@ -76,6 +76,10 @@ impl Cpu {
 
         match instruction {
             Instruction::AddValue { register, value } => self.registers.add_value(register, value),
+            Instruction::CallSubroutine(addr) => {
+                self.stack.push(self.program_counter);
+                self.program_counter = addr;
+            }
             Instruction::ClearScreen => self.display.clear(),
             Instruction::Draw {
                 register1,
@@ -188,5 +192,31 @@ mod tests {
                 expected_value, actual_value
             );
         }
+    }
+
+    #[test]
+    fn correctly_handles_call_subroutine_instruction() {
+        let raw_instructions = vec![0x2345_u16];
+        let mut cpu = Cpu::from_rom(Rom::from_raw_instructions(&raw_instructions));
+
+        let original_address = *cpu.program_counter;
+
+        cpu.tick();
+
+        assert_eq!(
+            0x345, *cpu.program_counter,
+            "Program counter has not been set to {:X}, actual {:X}",
+            0x345, *cpu.program_counter
+        );
+        assert_eq!(
+            1,
+            cpu.stack.len(),
+            "Expected one address to be pushed to the stack"
+        );
+        assert_eq!(
+            original_address + 2,
+            *cpu.stack[0],
+            "Address pushed to the stack is wrong"
+        );
     }
 }

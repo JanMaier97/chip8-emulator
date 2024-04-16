@@ -1,13 +1,17 @@
 use anyhow::{anyhow, Result};
 use std::fmt::Display;
 
-use crate::bits::{join_to_u16, join_to_u8, split_u16, split_u8, U4};
+use crate::{
+    bits::{join_to_u16, join_to_u8, split_u16, split_u8, U4},
+    memory::MemoryAddress,
+};
 
 pub enum Instruction {
     AddValue {
         register: U4,
         value: u8,
     },
+    CallSubroutine(MemoryAddress),
     ClearScreen,
     Draw {
         register1: U4,
@@ -32,6 +36,9 @@ impl Instruction {
                 raw_instruction
             ))?,
             (0x1, _, _, _) => Self::Jump(join_to_u16(n2, n3, n4)),
+            (0x2, _, _, _) => {
+                Self::CallSubroutine(MemoryAddress::from_u16(join_to_u16(n2, n3, n4)))
+            }
             (0x6, _, _, _) => Self::SetValue {
                 register: n2,
                 value: join_to_u8(n3, n4),
@@ -75,6 +82,7 @@ impl Display for Instruction {
             Instruction::AddValue { register, value } => {
                 write!(f, "ADD V{:X}, {:0>2X}", **register, *value)
             }
+            Instruction::CallSubroutine(addr) => write!(f, "CALL {:0>4X}", **addr),
             Instruction::ClearScreen => write!(f, "CLS"),
             Instruction::Draw {
                 register1,
