@@ -20,6 +20,12 @@ impl Deref for U4 {
     }
 }
 
+impl From<U4> for usize {
+    fn from(value: U4) -> Self {
+        return value.0 as usize;
+    }
+}
+
 pub fn split_u16(value: u16) -> (u8, u8) {
     let upper = (value & 0b11111111_00000000) >> 8;
     let lower = value & 0b11111111;

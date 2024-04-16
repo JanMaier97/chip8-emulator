@@ -1,3 +1,6 @@
+use anyhow::{anyhow, Result};
+use std::fmt::Display;
+
 use crate::bits::{join_to_u16, join_to_u8, split_u16, split_u8, U4};
 
 pub enum Instruction {
@@ -20,14 +23,14 @@ pub enum Instruction {
 }
 
 impl Instruction {
-    pub fn from_u16(raw_instruction: u16) -> Self {
+    pub fn try_from_u16(raw_instruction: u16) -> Result<Self> {
         let (n1, n2, n3, n4) = split_instruction(raw_instruction);
         let res = match (*n1, *n2, *n3, *n4) {
             (0x0, 0x0, 0xE, 0x0) => Self::ClearScreen,
-            (0x0, _, _, _) => panic!(
+            (0x0, _, _, _) => Err(anyhow!(
                 "Recieved machine instruction 0x{:0>4X} that cannot be handled",
                 raw_instruction
-            ),
+            ))?,
             (0x1, _, _, _) => Self::Jump(join_to_u16(n2, n3, n4)),
             (0x6, _, _, _) => Self::SetValue {
                 register: n2,
@@ -43,10 +46,13 @@ impl Instruction {
                 register2: n3,
                 sprite_length: n4,
             },
-            (_, _, _, _) => panic!("Found invalid instruction {:#04x}", raw_instruction),
+            (_, _, _, _) => Err(anyhow!(
+                "Found invalid instruction {:#04x}",
+                raw_instruction
+            ))?,
         };
 
-        res
+        Ok(res)
     }
 }
 
@@ -61,4 +67,29 @@ fn split_instruction(instruction: u16) -> (U4, U4, U4, U4) {
         lower_nibbles.0,
         lower_nibbles.1,
     );
+}
+
+impl Display for Instruction {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match &self {
+            Instruction::AddValue { register, value } => {
+                write!(f, "ADD V{:X}, {:0>2X}", **register, *value)
+            }
+            Instruction::ClearScreen => write!(f, "CLS"),
+            Instruction::Draw {
+                register1,
+                register2,
+                sprite_length,
+            } => write!(
+                f,
+                "DRW V{:X}, V{:X}, {:X}",
+                **register1, **register2, **sprite_length
+            ),
+            Instruction::Jump(address) => write!(f, "JP {:0>4X}", address),
+            Instruction::SetIndex(idx) => write!(f, "LD I, {:0>4X}", idx),
+            Instruction::SetValue { register, value } => {
+                write!(f, "LD {:X}, {:0>2X}", **register, value)
+            }
+        }
+    }
 }

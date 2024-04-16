@@ -1,9 +1,9 @@
-use std::ops::{Index, IndexMut};
+use std::ops::{Deref, Index, IndexMut};
 
 use crate::{bits::U4, rom::Rom};
 
 pub const MEMORY_START: MemoryAddress = MemoryAddress(0x200);
-const MEMORY_SIZE: usize = 4096;
+pub const MEMORY_SIZE: usize = 4096;
 
 const FONT_DATA: [u8; 80] = [
     0xF0, 0x90, 0x90, 0x90, 0xF0, // 0
@@ -28,8 +28,8 @@ const FONT_DATA: [u8; 80] = [
 pub struct MemoryAddress(u16);
 
 impl MemoryAddress {
-    pub fn from_byte(value: u8) -> Self {
-        MemoryAddress(value as u16)
+    pub fn from_u16(value: u16) -> Self {
+        MemoryAddress(value)
     }
 
     pub fn increment(&mut self) {
@@ -44,6 +44,14 @@ impl MemoryAddress {
 impl From<MemoryAddress> for usize {
     fn from(value: MemoryAddress) -> Self {
         return value.0 as usize;
+    }
+}
+
+impl Deref for MemoryAddress {
+    type Target = u16;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
     }
 }
 
@@ -78,9 +86,8 @@ impl Memory {
         return (upper << 8) + lower;
     }
 
-    pub fn read_slice(&self, start: MemoryAddress, length: U4) -> &[u8] {
+    pub fn read_slice(&self, start: MemoryAddress, length: usize) -> &[u8] {
         let start = start.0 as usize;
-        let length = *length as usize;
         if start + length > MEMORY_SIZE {
             panic!(
                 "Trying to access memory in range {}-{}, which is invalid",

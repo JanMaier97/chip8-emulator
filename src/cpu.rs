@@ -9,7 +9,7 @@ use crate::{
     memory::{Memory, MemoryAddress},
 };
 
-struct VariableRegisters {
+pub struct VariableRegisters {
     registers: [u8; 16],
 }
 
@@ -28,7 +28,7 @@ impl VariableRegisters {
         self.registers[idx] = self.registers[idx].wrapping_add(value);
     }
 
-    fn get_value(&self, register: U4) -> u8 {
+    pub fn get_value(&self, register: U4) -> u8 {
         let idx = *register as usize;
         self.registers[idx]
     }
@@ -48,13 +48,13 @@ impl fmt::Debug for VariableRegisters {
 
 pub struct Cpu {
     pub display: Display,
-    program_counter: MemoryAddress,
-    index: MemoryAddress,
+    pub program_counter: MemoryAddress,
+    pub index: MemoryAddress,
     stack: Vec<MemoryAddress>,
-    delay_timer: u8,
-    sound_timer: u8,
-    registers: VariableRegisters,
-    memory: Memory,
+    pub delay_timer: u8,
+    pub sound_timer: u8,
+    pub registers: VariableRegisters,
+    pub memory: Memory,
 }
 
 impl Cpu {
@@ -62,7 +62,7 @@ impl Cpu {
         Cpu {
             display: Display::new(),
             program_counter: MEMORY_START,
-            index: MemoryAddress::from_byte(0),
+            index: MemoryAddress::from_u16(0),
             stack: Vec::new(),
             delay_timer: 0,
             sound_timer: 0,
@@ -90,17 +90,19 @@ impl Cpu {
 
     fn fetch_instruction(&mut self) -> Instruction {
         let instruction = self.memory.read_instruction(self.program_counter);
-        let instruction = Instruction::from_u16(instruction);
+        let instruction = Instruction::try_from_u16(instruction);
 
         self.program_counter.increment();
 
-        return instruction;
+        return instruction.unwrap();
     }
 
     fn handle_draw_instruction(&mut self, x_register: U4, y_register: U4, sprite_length: U4) {
         let x_pos = self.registers.get_value(x_register);
         let y_pos = self.registers.get_value(y_register);
-        let sprite = self.memory.read_slice(self.index, sprite_length);
+        let sprite = self
+            .memory
+            .read_slice(self.index, usize::from(sprite_length));
         self.display.draw(x_pos, y_pos, sprite);
     }
 }
@@ -116,7 +118,7 @@ mod tests {
         let mut cpu = Cpu::from_rom(rom);
 
         println!("{:0>4X?}", cpu.program_counter);
-        println!("{:X?}", cpu.memory.read_slice(MEMORY_START, U4::new(4)));
+        println!("{:X?}", cpu.memory.read_slice(MEMORY_START, 4));
         cpu.tick();
 
         assert_eq!(usize::from(cpu.index), 0x234);
