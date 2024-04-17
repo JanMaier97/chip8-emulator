@@ -50,7 +50,7 @@ pub struct Cpu {
     pub display: Display,
     pub program_counter: MemoryAddress,
     pub index: MemoryAddress,
-    stack: Vec<MemoryAddress>,
+    pub stack: Vec<MemoryAddress>,
     pub delay_timer: u8,
     pub sound_timer: u8,
     pub registers: VariableRegisters,

@@ -36,22 +36,23 @@ async fn main() {
                 .exact_width(400.0)
                 .resizable(false)
                 .show(egui_ctx, |ui| {
+                    ui.separator();
                     draw_degubbing_controlls(ui, &mut cpu);
-
+                    ui.separator();
                     draw_instructions(ui, &cpu);
                     ui.separator();
-                    egui::Grid::new("registers")
-                        .num_columns(4)
-                        .spacing([40.0, 4.0])
-                        .striped(true)
-                        .show(ui, |ui| draw_register_ui(ui, &cpu));
+                    draw_register_grid(ui, &cpu);
+                    ui.separator();
+                    draw_stack(ui, &cpu);
                 });
 
             egui::SidePanel::left("Roms")
                 .exact_width(400.0)
                 .resizable(false)
                 .show(egui_ctx, |ui| {
+                    ui.separator();
                     draw_roms(ui, &mut cpu, &roms);
+                    ui.separator();
                 });
 
             egui::TopBottomPanel::bottom("Memory")
@@ -65,6 +66,30 @@ async fn main() {
     }
 }
 
+fn draw_register_grid(ui: &mut egui::Ui, cpu: &Cpu) {
+    ui.heading("Registers");
+    egui::Grid::new("registers")
+        .num_columns(4)
+        .spacing([40.0, 4.0])
+        .striped(true)
+        .show(ui, |ui| draw_register_grid_content(ui, &cpu));
+}
+
+fn draw_stack(ui: &mut egui::Ui, cpu: &Cpu) {
+    ui.heading("Stack");
+    egui::Grid::new("stack")
+        .num_columns(2)
+        .spacing([40.0, 4.0])
+        .striped(true)
+        .show(ui, |ui| {
+            for (index, address) in cpu.stack.iter().enumerate() {
+                ui.label(format!("{:>2}", index));
+                ui.label(format!("{:0>4}", **address));
+                ui.end_row();
+            }
+        });
+}
+
 fn draw_degubbing_controlls(ui: &mut egui::Ui, cpu: &mut Cpu) {
     ui.horizontal(|ui| {
         if ui.button("Step").clicked() {
@@ -74,6 +99,7 @@ fn draw_degubbing_controlls(ui: &mut egui::Ui, cpu: &mut Cpu) {
 }
 
 fn draw_roms(ui: &mut egui::Ui, cpu: &mut Cpu, roms: &[&str]) {
+    ui.heading("Roms");
     for rom in roms {
         if ui.button(*rom).clicked() {
             *cpu = Cpu::from_rom(Rom::from_file(&rom));
@@ -100,6 +126,7 @@ fn draw_instructions(ui: &mut egui::Ui, cpu: &Cpu) {
         .collect::<Vec<_>>();
 
     let start = usize::from(start);
+    ui.heading("Instructions");
     egui::Grid::new("instructions")
         .num_columns(4)
         .spacing([40.0, 4.0])
@@ -131,7 +158,7 @@ fn draw_instructions(ui: &mut egui::Ui, cpu: &Cpu) {
         });
 }
 
-fn draw_register_ui(ui: &mut egui::Ui, cpu: &Cpu) {
+fn draw_register_grid_content(ui: &mut egui::Ui, cpu: &Cpu) {
     ui.label("PC:");
     ui.label(format!("{:0>4X}", *cpu.program_counter));
 
