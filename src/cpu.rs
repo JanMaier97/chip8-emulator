@@ -150,6 +150,11 @@ impl Cpu {
                     self.registers.set_value(register, *byte);
                 }
             }
+            Instruction::ShiftRight { register1, .. } => {
+                let value = self.registers.get_value(register1);
+                self.registers.set_value(register1, value >> 1);
+                self.registers.set_value(U4::new(0xF), value & 1);
+            }
             Instruction::SkipIfEqual { register, value } => {
                 if self.registers.get_value(register) == value {
                     self.program_counter.increment();
@@ -676,6 +681,69 @@ mod tests {
             0xE4,
             cpu.registers.get_value(U4::new(0x3)),
             "V3 should have the same value as V1"
+        );
+    }
+
+    #[test]
+    fn correctly_handle_8xy7_load_register_from_register() {
+        let instructions = vec![
+            0x61E4, // set V1
+            0x8310, // set V3 from V1
+        ];
+
+        let rom = Rom::from_raw_instructions(&instructions);
+        let mut cpu = Cpu::from_rom(rom).unwrap();
+
+        cpu.tick().unwrap();
+        cpu.tick().unwrap();
+
+        assert_eq!(
+            0xE4,
+            cpu.registers.get_value(U4::new(0x3)),
+            "V3 should have the same value as V1"
+        );
+    }
+
+    #[test]
+    fn correctly_handle_8xy6_shift_register_once() {
+        let instructions = vec![
+            0x63FF, // set V1
+            0x61E1, // set V1
+            0x8136, // right shift
+            0x61E0, // set V1
+            0x8136, // right shift
+        ];
+
+        let rom = Rom::from_raw_instructions(&instructions);
+        let mut cpu = Cpu::from_rom(rom).unwrap();
+
+        cpu.tick().unwrap();
+        cpu.tick().unwrap();
+        cpu.tick().unwrap();
+
+        assert_eq!(
+            0xE1 >> 1,
+            cpu.registers.get_value(U4::new(0x1)),
+            "V1 has not been shifted correctly"
+        );
+        assert_eq!(
+            1,
+            cpu.registers.get_value(U4::new(0xF)),
+            "VF has to be 1 if a bit has been shifted out"
+        );
+
+        cpu.tick().unwrap();
+        cpu.tick().unwrap();
+
+        assert_eq!(
+            0xE0 >> 1,
+            cpu.registers.get_value(U4::new(0x1)),
+            "V1 has not been shifted correctly"
+        );
+        assert_eq!(
+            0,
+            cpu.registers.get_value(U4::new(0xF)),
+            "VF has to be 1 if a bit has been shifted out"
         );
     }
 }
