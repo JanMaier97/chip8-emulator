@@ -1,4 +1,5 @@
 use std::fmt;
+use anyhow::Result;
 
 use crate::rom::Rom;
 use crate::Instruction;
@@ -71,8 +72,8 @@ impl Cpu {
         }
     }
 
-    pub fn tick(&mut self) {
-        let instruction = self.fetch_instruction();
+    pub fn tick(&mut self) -> Result<()> {
+        let instruction = self.fetch_instruction()?;
 
         match instruction {
             Instruction::AddValue { register, value } => self.registers.add_value(register, value),
@@ -105,15 +106,17 @@ impl Cpu {
                 }
             }
         }
+
+        Ok(())
     }
 
-    fn fetch_instruction(&mut self) -> Instruction {
+    fn fetch_instruction(&mut self) -> Result<Instruction> {
         let instruction = self.memory.read_instruction(self.program_counter);
-        let instruction = Instruction::try_from_u16(instruction);
+        let instruction = Instruction::try_from_u16(instruction)?;
 
         self.program_counter.increment();
 
-        return instruction.unwrap();
+        return Ok(instruction);
     }
 
     fn handle_draw_instruction(&mut self, x_register: U4, y_register: U4, sprite_length: U4) {
@@ -140,7 +143,7 @@ mod tests {
 
         println!("{:0>4X?}", cpu.program_counter);
         println!("{:X?}", cpu.memory.read_slice(MEMORY_START, 4));
-        cpu.tick();
+        cpu.tick().unwrap();
 
         assert_eq!(usize::from(cpu.index), 0x234);
     }
@@ -159,7 +162,7 @@ mod tests {
         let mut cpu = Cpu::from_rom(rom);
 
         for (index, (reg, value)) in registers.zip(values).enumerate() {
-            cpu.tick();
+            cpu.tick().unwrap();
             println!("Iteration {:0>2}: {:?}", index, cpu.registers);
 
             let register_value = cpu.registers.get_value(U4::new(reg as u8)) as u16;
@@ -196,8 +199,8 @@ mod tests {
         for (index, ((reg, start_value), value)) in
             registers.zip(start_values).zip(add_values).enumerate()
         {
-            cpu.tick();
-            cpu.tick();
+            cpu.tick().unwrap();
+            cpu.tick().unwrap();
 
             println!("Iteration {:0>2}: {:?}", index, cpu.registers);
 
@@ -218,7 +221,7 @@ mod tests {
 
         let original_address = *cpu.program_counter;
 
-        cpu.tick();
+        cpu.tick().unwrap();
 
         assert_eq!(
             0x345, *cpu.program_counter,
@@ -250,10 +253,10 @@ mod tests {
             ];
             let mut cpu = Cpu::from_rom(Rom::from_raw_instructions(&raw_instructions));
 
-            cpu.tick();
+            cpu.tick().unwrap();
 
             let original_address = *cpu.program_counter;
-            cpu.tick();
+            cpu.tick().unwrap();
             assert_eq!(
                 original_address + 2,
                 *cpu.program_counter,
@@ -262,7 +265,7 @@ mod tests {
             );
 
             let original_address = *cpu.program_counter;
-            cpu.tick();
+            cpu.tick().unwrap();
             assert_eq!(
                 original_address + 4,
                 *cpu.program_counter,
@@ -295,7 +298,7 @@ mod tests {
             let mut cpu = Cpu::from_rom(Rom::from_raw_instructions(&raw_instructions));
 
             raw_instructions.iter().for_each(|_| {
-                cpu.tick();
+                cpu.tick().unwrap();
             });
 
             for reg in 0..=current_register {

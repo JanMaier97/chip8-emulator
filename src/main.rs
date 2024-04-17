@@ -1,5 +1,6 @@
 mod memory;
 
+use anyhow::Result;
 use bits::U4;
 use cpu::Cpu;
 use display::Display;
@@ -28,6 +29,7 @@ struct UiState {
     cpu: Cpu,
     execution: CpuExecution,
     current_rom: String,
+    result: Result<()>,
 }
 
 impl UiState {
@@ -37,7 +39,21 @@ impl UiState {
             cpu,
             execution: CpuExecution::Paused,
             current_rom: rom_path.to_string(),
+            result: Ok(()),
         }
+    }
+
+    fn handle_tick(&mut self) {
+        let result = self.cpu.tick();
+        self.result = result;
+    }
+
+    fn is_paused(&self) -> bool {
+        self.result.is_ok() && self.execution == CpuExecution::Paused
+    }
+
+    fn is_running(&self) -> bool {
+        self.result.is_ok() && self.execution == CpuExecution::Running
     }
 }
 
@@ -54,7 +70,7 @@ async fn main() {
         clear_background(RED);
 
         if state.execution == CpuExecution::Running {
-            state.cpu.tick();
+            state.handle_tick();
         }
 
         draw_screen(&state.cpu.display);
@@ -120,13 +136,13 @@ fn draw_stack(ui: &mut egui::Ui, cpu: &Cpu) {
 
 fn draw_degubbing_controlls(ui: &mut egui::Ui, state: &mut UiState) {
     ui.horizontal(|ui| {
-        ui.add_enabled_ui(state.execution == CpuExecution::Paused, |ui| {
+        ui.add_enabled_ui(state.is_paused(), |ui| {
             if ui.button("Step").clicked() {
-                state.cpu.tick();
+                state.handle_tick();
             }
         });
 
-        match state.execution {
+        ui.add_enabled_ui(state.result.is_ok(), |ui| match state.execution {
             CpuExecution::Paused => {
                 if ui.button("Continue").clicked() {
                     state.execution = CpuExecution::Running;
@@ -137,7 +153,8 @@ fn draw_degubbing_controlls(ui: &mut egui::Ui, state: &mut UiState) {
                     state.execution = CpuExecution::Paused;
                 }
             }
-        }
+        });
+
         if ui.button("Restart").clicked() {
             *state = UiState::from_rom(&state.current_rom);
         }
