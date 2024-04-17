@@ -123,9 +123,12 @@ impl Cpu {
             }
             Instruction::SkipIfEqual { register, value } => {
                 if self.registers.get_value(register) == value {
-                    self.program_counter;
                     self.program_counter.increment();
-                    self.program_counter;
+                }
+            }
+            Instruction::SkipNotEqualByte { register, value } => {
+                if self.registers.get_value(register) != value {
+                    self.program_counter.increment();
                 }
             }
         }
@@ -273,7 +276,7 @@ mod tests {
     }
 
     #[test]
-    fn correctly_handle_skip_if_equal_instruction() {
+    fn correctly_handle_4xkk_skip_if_equal() {
         for register in 0..16 {
             let value = 0x24;
             let (v1, v2) = split_u8(value);
@@ -282,6 +285,41 @@ mod tests {
                 join_nibbles(0x6, register, *v1, *v2), // load value into register
                 join_nibbles(0x3, register, 0, 0),     // compare register with 0x00
                 join_nibbles(0x3, register, *v1, *v2), // compare register with correct value
+            ];
+            let mut cpu = Cpu::from_rom(Rom::from_raw_instructions(&raw_instructions)).unwrap();
+
+            cpu.tick().unwrap();
+
+            let original_address = *cpu.program_counter;
+            cpu.tick().unwrap();
+            assert_eq!(
+                original_address + 2,
+                *cpu.program_counter,
+                "{:X}: Expected PC to increment normally and not skip ahead",
+                register
+            );
+
+            let original_address = *cpu.program_counter;
+            cpu.tick().unwrap();
+            assert_eq!(
+                original_address + 4,
+                *cpu.program_counter,
+                "{:X}: Expected PC to increment twice and skip one instruction",
+                register
+            );
+        }
+    }
+
+    #[test]
+    fn correctly_handles_4xkk_skip_not_equal() {
+        for register in 0..16 {
+            let value = 0x24;
+            let (v1, v2) = split_u8(value);
+
+            let raw_instructions = vec![
+                join_nibbles(0x6, register, *v1, *v2), // load value into register
+                join_nibbles(0x4, register, *v1, *v2), // compare register with correct value
+                join_nibbles(0x4, register, 0, 0),     // compare register with 0x00
             ];
             let mut cpu = Cpu::from_rom(Rom::from_raw_instructions(&raw_instructions)).unwrap();
 

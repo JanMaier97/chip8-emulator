@@ -35,6 +35,10 @@ pub enum Instruction {
         register: U4,
         value: u8,
     },
+    SkipNotEqualByte {
+        register: U4,
+        value: u8,
+    },
 }
 
 impl Instruction {
@@ -51,6 +55,10 @@ impl Instruction {
                 Self::CallSubroutine(MemoryAddress::from_u16(join_to_u16(n2, n3, n4)))
             }
             (0x3, _, _, _) => Self::SkipIfEqual {
+                register: n2,
+                value: join_to_u8(n3, n4),
+            },
+            (0x4, _, _, _) => Self::SkipNotEqualByte {
                 register: n2,
                 value: join_to_u8(n3, n4),
             },
@@ -102,7 +110,10 @@ impl Display for Instruction {
             }
             Instruction::SetValuesFromMemory { register } => write!(f, "LD V{:X}, [I]", **register),
             Instruction::SkipIfEqual { register, value } => {
-                write!(f, "SK V{:X}, {:0>2X}", **register, value)
+                write!(f, "SE V{:X}, {:0>2X}", **register, value)
+            }
+            Instruction::SkipNotEqualByte { register, value } => {
+                write!(f, "SNE V{:X}, {:0>2X}", **register, value)
             }
         }
     }
