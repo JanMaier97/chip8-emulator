@@ -38,6 +38,10 @@ pub enum Instruction {
     StoreBcdRepresentation {
         register: U4,
     },
+    SubRegisters {
+        register1: U4,
+        register2: U4,
+    },
     SkipIfEqual {
         register: U4,
         value: u8,
@@ -78,6 +82,10 @@ impl Instruction {
                 value: join_to_u8(n3, n4),
             },
             (0x8, _, _, 0x4) => Self::AddRegisters {
+                register1: n2,
+                register2: n3,
+            },
+            (0x8, _, _, 0x5) => Self::SubRegisters {
                 register1: n2,
                 register2: n3,
             },
@@ -136,6 +144,10 @@ impl Display for Instruction {
             Instruction::StoreBcdRepresentation { register } => {
                 write!(f, "LD B, V{:X}", **register)
             }
+            Instruction::SubRegisters {
+                register1,
+                register2,
+            } => write!(f, "SUB V{:X}, V{:X}", **register1, **register2),
         }
     }
 }
