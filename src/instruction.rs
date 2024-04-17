@@ -20,6 +20,9 @@ pub enum Instruction {
         sprite_length: U4,
     },
     Jump(u16),
+    LoadFont {
+        register: U4,
+    },
     SetIndex(u16),
     SetValue {
         register: U4,
@@ -65,6 +68,7 @@ impl Instruction {
                 register2: n3,
                 sprite_length: n4,
             },
+            (0xF, _, 0x2, 0x9) => Self::LoadFont { register: n2 },
             (0xF, _, 0x6, 0x5) => Self::SetValuesFromMemory { register: n2 },
             (_, _, _, _) => Err(anyhow!("Invalid instruction 0x{:0>4X}", raw_instruction))?,
         };
@@ -91,6 +95,7 @@ impl Display for Instruction {
                 **register1, **register2, **sprite_length
             ),
             Instruction::Jump(address) => write!(f, "JP {:0>4X}", address),
+            Instruction::LoadFont { register } => write!(f, "LD F, V{:x}", **register),
             Instruction::SetIndex(idx) => write!(f, "LD I, {:0>4X}", idx),
             Instruction::SetValue { register, value } => {
                 write!(f, "LD V{:X}, {:0>2X}", **register, value)

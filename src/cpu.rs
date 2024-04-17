@@ -106,6 +106,11 @@ impl Cpu {
                 sprite_length,
             } => self.handle_draw_instruction(register1, register2, sprite_length)?,
             Instruction::Jump(address) => self.program_counter.set(address),
+            Instruction::LoadFont { register } => {
+                let value = self.registers.get_value(register);
+                let value = U4::new(value & 0b00001111);
+                self.index = self.memory.get_address_for_font(value);
+            }
             Instruction::SetIndex(new_index) => self.index.set(new_index),
             Instruction::SetValue { register, value } => self.registers.set_value(register, value),
             Instruction::SetValuesFromMemory { register } => {
@@ -342,5 +347,33 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn correctly_handles_fx29_load_font() {
+        let instructions = vec![
+            0x6000, // load 0 into V0
+            0x610F, // load F into V1
+            0x62F5, // load F5 into V2, to load 5
+            0xF129, // Load font using V1
+            0xF029, // Load font using V0
+            0xF229, // Load font using V2
+        ];
+
+        let rom = Rom::from_raw_instructions(&instructions);
+        let mut cpu = Cpu::from_rom(rom).unwrap();
+
+        cpu.tick().unwrap();
+        cpu.tick().unwrap();
+        cpu.tick().unwrap();
+
+        cpu.tick().unwrap();
+        assert_eq!(0x4B, *cpu.index);
+
+        cpu.tick().unwrap();
+        assert_eq!(0x0, *cpu.index);
+
+        cpu.tick().unwrap();
+        assert_eq!(0x19, *cpu.index);
     }
 }

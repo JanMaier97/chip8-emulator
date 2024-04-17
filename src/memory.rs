@@ -1,10 +1,12 @@
 use anyhow::{anyhow, Result};
 use std::ops::{Deref, Index, IndexMut};
 
-use crate::rom::Rom;
+use crate::{bits::U4, rom::Rom};
 
 pub const MEMORY_START: MemoryAddress = MemoryAddress(0x200);
 pub const MEMORY_SIZE: usize = 4096;
+
+const SINGLE_FONT_BYTE_COUNT: u16 = 5;
 
 const FONT_DATA: [u8; 80] = [
     0xF0, 0x90, 0x90, 0x90, 0xF0, // 0
@@ -88,6 +90,12 @@ impl Memory {
         }
 
         Ok(Memory { data })
+    }
+
+    pub fn get_address_for_font(&self, value: U4) -> MemoryAddress {
+        // only consider last nible
+        let raw_address = *value as u16 * SINGLE_FONT_BYTE_COUNT;
+        MemoryAddress(raw_address)
     }
 
     pub fn read_instruction(&self, address: MemoryAddress) -> u16 {
