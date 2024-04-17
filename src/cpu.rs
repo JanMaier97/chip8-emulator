@@ -89,6 +89,21 @@ impl Cpu {
             Instruction::Jump(address) => self.program_counter.set(address),
             Instruction::SetIndex(new_index) => self.index.set(new_index),
             Instruction::SetValue { register, value } => self.registers.set_value(register, value),
+            Instruction::SetValuesFromMemory { register } => {
+                // get as many bytes as registers need to be filled
+                let bytes = self.memory.read_slice(self.index, *register as usize + 1);
+                for (register, byte) in bytes.iter().enumerate() {
+                    let register = U4::new(register as u8);
+                    self.registers.set_value(register, *byte);
+                }
+            }
+            Instruction::SkipIfEqual { register, value } => {
+                if self.registers.get_value(register) == value {
+                    self.program_counter;
+                    self.program_counter.increment();
+                    self.program_counter;
+                }
+            }
         }
     }
 
@@ -113,6 +128,8 @@ impl Cpu {
 
 #[cfg(test)]
 mod tests {
+    use crate::bits::{join_nibbles, join_to_u8, split_instruction, split_u8};
+
     use super::*;
 
     #[test]
@@ -218,5 +235,82 @@ mod tests {
             *cpu.stack[0],
             "Address pushed to the stack is wrong"
         );
+    }
+
+    #[test]
+    fn correctly_handle_skip_if_equal_instruction() {
+        for register in 0..16 {
+            let value = 0x24;
+            let (v1, v2) = split_u8(value);
+
+            let raw_instructions = vec![
+                join_nibbles(0x6, register, *v1, *v2), // load value into register
+                join_nibbles(0x3, register, 0, 0),     // compare register with 0x00
+                join_nibbles(0x3, register, *v1, *v2), // compare register with correct value
+            ];
+            let mut cpu = Cpu::from_rom(Rom::from_raw_instructions(&raw_instructions));
+
+            cpu.tick();
+
+            let original_address = *cpu.program_counter;
+            cpu.tick();
+            assert_eq!(
+                original_address + 2,
+                *cpu.program_counter,
+                "{:X}: Expected PC to increment normally and not skip ahead",
+                register
+            );
+
+            let original_address = *cpu.program_counter;
+            cpu.tick();
+            assert_eq!(
+                original_address + 4,
+                *cpu.program_counter,
+                "{:X}: Expected PC to increment twice and skip one instruction",
+                register
+            );
+        }
+    }
+
+    #[test]
+    fn correctly_handle_fx65_load_memory_into_registers() {
+        for current_register in 0..16 {
+            let raw_instructions = vec![
+                join_nibbles(0x6, 0x1, 0x0, 0x1), // load value into register
+                join_nibbles(0x6, 0x2, 0x3, 0x2), // load value into register
+                join_nibbles(0x6, 0x3, 0x2, 0x5), // load value into register
+                join_nibbles(0x6, 0x4, 0x1, 0x3), // load value into register
+                join_nibbles(0x6, 0x5, 0x1, 0x3), // load value into register
+                join_nibbles(0x6, 0x6, 0x1, 0x3), // load value into register
+                join_nibbles(0x6, 0x7, 0x1, 0x3), // load value into register
+                join_nibbles(0xA, 0x2, 0x0, 0x0), // set index to rom start
+                join_nibbles(0xF, current_register, 0x6, 0x5), // load memory into registers V0 till V<register>
+            ];
+
+            let memory = raw_instructions
+                .iter()
+                .map(|inst| split_instruction(*inst))
+                .flat_map(|(n1, n2, n3, n4)| vec![join_to_u8(n1, n2), join_to_u8(n3, n4)])
+                .collect::<Vec<_>>();
+            let mut cpu = Cpu::from_rom(Rom::from_raw_instructions(&raw_instructions));
+
+            raw_instructions.iter().for_each(|_| {
+                cpu.tick();
+            });
+
+            for reg in 0..=current_register {
+                let register = U4::new(reg);
+                let reg_value = cpu.registers.get_value(register);
+                let expected_value = memory[reg as usize];
+
+                assert_eq!(
+                    expected_value,
+                    reg_value,
+                    "({:X}) Expected register {:X} to have loaded a value from memory",
+                    raw_instructions.last().unwrap(),
+                    reg
+                );
+            }
+        }
     }
 }

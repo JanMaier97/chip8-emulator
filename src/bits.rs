@@ -57,3 +57,24 @@ pub fn join_bytes(b1: u8, b2: u8) -> u16 {
 pub fn join_to_u8(n1: U4, n2: U4) -> u8 {
     (*n1 << 4) + *n2
 }
+
+pub fn join_nibbles(n1: u8, n2: u8, n3: u8, n4: u8) -> u16 {
+    let n1 = n1 as u16;
+    let n2 = n2 as u16;
+    let n3 = n3 as u16;
+    let n4 = n4 as u16;
+    (n1 << 12) + (n2 << 8) + (n3 << 4) + n4
+}
+
+pub fn split_instruction(instruction: u16) -> (U4, U4, U4, U4) {
+    let (upper_byte, lower_byte) = split_u16(instruction);
+    let upper_nibbles = split_u8(upper_byte);
+    let lower_nibbles = split_u8(lower_byte);
+
+    return (
+        upper_nibbles.0,
+        upper_nibbles.1,
+        lower_nibbles.0,
+        lower_nibbles.1,
+    );
+}

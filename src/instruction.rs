@@ -2,7 +2,7 @@ use anyhow::{anyhow, Result};
 use std::fmt::Display;
 
 use crate::{
-    bits::{join_to_u16, join_to_u8, split_u16, split_u8, U4},
+    bits::{join_to_u16, join_to_u8, split_instruction, split_u16, split_u8, U4},
     memory::MemoryAddress,
 };
 
@@ -24,6 +24,13 @@ pub enum Instruction {
         register: U4,
         value: u8,
     },
+    SetValuesFromMemory {
+        register: U4,
+    },
+    SkipIfEqual {
+        register: U4,
+        value: u8,
+    },
 }
 
 impl Instruction {
@@ -39,6 +46,10 @@ impl Instruction {
             (0x2, _, _, _) => {
                 Self::CallSubroutine(MemoryAddress::from_u16(join_to_u16(n2, n3, n4)))
             }
+            (0x3, _, _, _) => Self::SkipIfEqual {
+                register: n2,
+                value: join_to_u8(n3, n4),
+            },
             (0x6, _, _, _) => Self::SetValue {
                 register: n2,
                 value: join_to_u8(n3, n4),
@@ -53,6 +64,7 @@ impl Instruction {
                 register2: n3,
                 sprite_length: n4,
             },
+            (0xF, _, 0x6, 0x5) => Self::SetValuesFromMemory { register: n2 },
             (_, _, _, _) => Err(anyhow!(
                 "Found invalid instruction {:#04x}",
                 raw_instruction
@@ -61,19 +73,6 @@ impl Instruction {
 
         Ok(res)
     }
-}
-
-fn split_instruction(instruction: u16) -> (U4, U4, U4, U4) {
-    let (upper_byte, lower_byte) = split_u16(instruction);
-    let upper_nibbles = split_u8(upper_byte);
-    let lower_nibbles = split_u8(lower_byte);
-
-    return (
-        upper_nibbles.0,
-        upper_nibbles.1,
-        lower_nibbles.0,
-        lower_nibbles.1,
-    );
 }
 
 impl Display for Instruction {
@@ -96,7 +95,11 @@ impl Display for Instruction {
             Instruction::Jump(address) => write!(f, "JP {:0>4X}", address),
             Instruction::SetIndex(idx) => write!(f, "LD I, {:0>4X}", idx),
             Instruction::SetValue { register, value } => {
-                write!(f, "LD {:X}, {:0>2X}", **register, value)
+                write!(f, "LD V{:X}, {:0>2X}", **register, value)
+            }
+            Instruction::SetValuesFromMemory { register } => write!(f, "LD V{:X}, [I]", **register),
+            Instruction::SkipIfEqual { register, value } => {
+                write!(f, "SK V{:X}, {:0>2X}", **register, value)
             }
         }
     }
