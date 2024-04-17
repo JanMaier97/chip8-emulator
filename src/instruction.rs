@@ -47,6 +47,10 @@ pub enum Instruction {
         register1: U4,
         register2: U4,
     },
+    SubRegistersReversed {
+        register1: U4,
+        register2: U4,
+    },
     SkipIfEqual {
         register: U4,
         value: u8,
@@ -96,6 +100,10 @@ impl Instruction {
                 register2: n3,
             },
             (0x8, _, _, 0x5) => Self::SubRegisters {
+                register1: n2,
+                register2: n3,
+            },
+            (0x8, _, _, 0x7) => Self::SubRegistersReversed {
                 register1: n2,
                 register2: n3,
             },
@@ -163,6 +171,10 @@ impl Display for Instruction {
                 register1,
                 register2,
             } => write!(f, "SUB V{:X}, V{:X}", **register1, **register2),
+            Instruction::SubRegistersReversed {
+                register1,
+                register2,
+            } => write!(f, "SUBN V{:X}, V{:X}", **register1, **register2),
         }
     }
 }

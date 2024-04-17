@@ -166,12 +166,17 @@ impl Cpu {
             } => {
                 let value1 = self.registers.get_value(register1);
                 let value2 = self.registers.get_value(register2);
-                self.registers
-                    .set_value(register1, value1.wrapping_sub(value2));
-
-                let flag_register = U4::new(0xF);
-                let flag_value = if value1 >= value2 { 1 } else { 0 };
-                self.registers.set_value(flag_register, flag_value);
+                let result = self.handle_sub(value1, value2);
+                self.registers.set_value(register1, result);
+            }
+            Instruction::SubRegistersReversed {
+                register1,
+                register2,
+            } => {
+                let value1 = self.registers.get_value(register1);
+                let value2 = self.registers.get_value(register2);
+                let result = self.handle_sub(value2, value1);
+                self.registers.set_value(register1, result);
             }
             Instruction::StoreBcdRepresentation { register } => {
                 let value = self.registers.get_value(register);
@@ -185,6 +190,12 @@ impl Cpu {
         }
 
         Ok(())
+    }
+
+    fn handle_sub(&mut self, lhs: u8, rhs: u8) -> u8 {
+        let flag_value = if lhs >= rhs { 1 } else { 0 };
+        self.registers.set_value(U4::new(0xF), flag_value);
+        lhs.wrapping_sub(rhs)
     }
 
     fn fetch_instruction(&mut self) -> Result<Instruction> {
@@ -543,6 +554,53 @@ mod tests {
             0x6100, // set v1 to 0xFF
             0x6201, // set v2 to 0x01
             0x8125, // add v1 and v2, with otherflow
+        ];
+
+        let rom = Rom::from_raw_instructions(&instructions);
+        let mut cpu = Cpu::from_rom(rom).unwrap();
+
+        cpu.tick().unwrap();
+        cpu.tick().unwrap();
+        cpu.tick().unwrap();
+        cpu.tick().unwrap();
+
+        assert_eq!(
+            0x0,
+            cpu.registers.get_value(U4::new(0)),
+            "Registers have not been subtracted correctly."
+        );
+        assert_eq!(
+            1,
+            cpu.registers.get_value(U4::new(0xF)),
+            "Flag register needs to be set to 1, if no underflow happens"
+        );
+
+        cpu.tick().unwrap();
+        cpu.tick().unwrap();
+        cpu.tick().unwrap();
+
+        assert_eq!(
+            0xFF,
+            cpu.registers.get_value(U4::new(1)),
+            "Subtractions needs to wrap when overflow happens"
+        );
+        assert_eq!(
+            0,
+            cpu.registers.get_value(U4::new(0xF)),
+            "Flag register must be 0, if an underflow happens"
+        );
+    }
+
+    #[test]
+    fn correctly_handle_8xy7_sub_registers_reverse() {
+        let instructions = vec![
+            0x6F00, // set flag register to 0
+            0x6001, // set v0 to 0x1
+            0x6501, // set v5 to 0x1
+            0x8057, // v5 - v0
+            0x6101, // set v1 to 0xFF
+            0x6200, // set v2 to 0x01
+            0x8127, // subn v1 and v2, with otherflow
         ];
 
         let rom = Rom::from_raw_instructions(&instructions);
