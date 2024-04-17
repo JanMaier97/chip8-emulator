@@ -95,6 +95,18 @@ impl Cpu {
     fn handle_instruction(&mut self, instruction: Instruction) -> Result<()> {
         match instruction {
             Instruction::AddValue { register, value } => self.registers.add_value(register, value),
+            Instruction::AddRegisters {
+                register1,
+                register2,
+            } => {
+                let value1 = self.registers.get_value(register1);
+                let value2 = self.registers.get_value(register2);
+                let (result, did_overflow) = value1.overflowing_add(value2);
+                self.registers.set_value(register1, result);
+
+                let flag_value = if did_overflow { 1 } else { 0 };
+                self.registers.set_value(U4::new(0xF), flag_value);
+            }
             Instruction::CallSubroutine(addr) => {
                 self.stack.push(self.program_counter);
                 self.program_counter = addr;
@@ -444,5 +456,52 @@ mod tests {
         assert_eq!(2, bytes[0]);
         assert_eq!(5, bytes[1]);
         assert_eq!(4, bytes[2]);
+    }
+
+    #[test]
+    fn correctly_handle_8xy4_add_registers() {
+        let instructions = vec![
+            0x6F01, // set vF to 0x1
+            0x6012, // set v0 to 0x12
+            0x6553, // set v5 to 0x53
+            0x8054, // v0 + v5, no carry
+            0x61FF, // set v1 to 0xFF
+            0x6201, // set v2 to 0x01
+            0x8124, // add v1 and v2, with otherflow
+        ];
+
+        let rom = Rom::from_raw_instructions(&instructions);
+        let mut cpu = Cpu::from_rom(rom).unwrap();
+
+        cpu.tick().unwrap();
+        cpu.tick().unwrap();
+        cpu.tick().unwrap();
+        cpu.tick().unwrap();
+
+        assert_eq!(
+            0x12 + 0x53,
+            cpu.registers.get_value(U4::new(0)),
+            "Registers have not been added correctly."
+        );
+        assert_eq!(
+            0,
+            cpu.registers.get_value(U4::new(0xF)),
+            "Flag register needs to be zero"
+        );
+
+        cpu.tick().unwrap();
+        cpu.tick().unwrap();
+        cpu.tick().unwrap();
+
+        assert_eq!(
+            0,
+            cpu.registers.get_value(U4::new(1)),
+            "Addition needs to wrap when overflow happens"
+        );
+        assert_eq!(
+            1,
+            cpu.registers.get_value(U4::new(0xF)),
+            "Flag register needs to be set to 1 if addition causes overflow"
+        );
     }
 }

@@ -12,6 +12,10 @@ pub enum Instruction {
         register: U4,
         value: u8,
     },
+    AddRegisters {
+        register1: U4,
+        register2: U4,
+    },
     CallSubroutine(MemoryAddress),
     ClearScreen,
     Draw {
@@ -73,6 +77,10 @@ impl Instruction {
                 register: n2,
                 value: join_to_u8(n3, n4),
             },
+            (0x8, _, _, 0x4) => Self::AddRegisters {
+                register1: n2,
+                register2: n3,
+            },
             (0xA, _, _, _) => Self::SetIndex(join_to_u16(n2, n3, n4)),
             (0xD, _, _, _) => Self::Draw {
                 register1: n2,
@@ -94,6 +102,12 @@ impl Display for Instruction {
         match &self {
             Instruction::AddValue { register, value } => {
                 write!(f, "ADD V{:X}, {:0>2X}", **register, *value)
+            }
+            Instruction::AddRegisters {
+                register1,
+                register2,
+            } => {
+                write!(f, "ADD V{:X}, V{:X}", **register1, **register2)
             }
             Instruction::CallSubroutine(addr) => write!(f, "CALL {:0>4X}", **addr),
             Instruction::ClearScreen => write!(f, "CLS"),
