@@ -150,6 +150,11 @@ impl Cpu {
                     self.registers.set_value(register, *byte);
                 }
             }
+            Instruction::ShiftLeft { register1, .. } => {
+                let value = self.registers.get_value(register1);
+                self.registers.set_value(register1, value << 1);
+                self.registers.set_value(U4::new(0xF), value >> 7);
+            }
             Instruction::ShiftRight { register1, .. } => {
                 let value = self.registers.get_value(register1);
                 self.registers.set_value(register1, value >> 1);
@@ -705,7 +710,7 @@ mod tests {
     }
 
     #[test]
-    fn correctly_handle_8xy6_shift_register_once() {
+    fn correctly_handle_8xy6_shift_register_right() {
         let instructions = vec![
             0x63FF, // set V1
             0x61E1, // set V1
@@ -743,7 +748,50 @@ mod tests {
         assert_eq!(
             0,
             cpu.registers.get_value(U4::new(0xF)),
+            "VF has to be 0 if a bit has not been shifted out"
+        );
+    }
+
+    #[test]
+    fn correctly_handle_8xye_shift_register_left() {
+        let instructions = vec![
+            0x63FF, // set V3
+            0x6187, // set V1
+            0x813E, // left shift
+            0x6177, // set V1
+            0x813E, // left shift
+        ];
+
+        let rom = Rom::from_raw_instructions(&instructions);
+        let mut cpu = Cpu::from_rom(rom).unwrap();
+
+        cpu.tick().unwrap();
+        cpu.tick().unwrap();
+        cpu.tick().unwrap();
+
+        assert_eq!(
+            0x87 << 1,
+            cpu.registers.get_value(U4::new(0x1)),
+            "V1 has not been shifted correctly"
+        );
+        assert_eq!(
+            1,
+            cpu.registers.get_value(U4::new(0xF)),
             "VF has to be 1 if a bit has been shifted out"
+        );
+
+        cpu.tick().unwrap();
+        cpu.tick().unwrap();
+
+        assert_eq!(
+            0x77 << 1,
+            cpu.registers.get_value(U4::new(0x1)),
+            "V1 has not been shifted correctly"
+        );
+        assert_eq!(
+            0,
+            cpu.registers.get_value(U4::new(0xF)),
+            "VF has to be 0 if a bit has not been shifted out"
         );
     }
 }

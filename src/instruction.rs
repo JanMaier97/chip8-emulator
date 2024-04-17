@@ -40,6 +40,10 @@ pub enum Instruction {
     SetValuesFromMemory {
         register: U4,
     },
+    ShiftLeft {
+        register1: U4,
+        register2: U4,
+    },
     ShiftRight {
         register1: U4,
         register2: U4,
@@ -109,9 +113,13 @@ impl Instruction {
             },
             (0x8, _, _, 0x6) => Self::ShiftRight {
                 register1: n2,
-                register2: n2,
+                register2: n3,
             },
             (0x8, _, _, 0x7) => Self::SubRegistersReversed {
+                register1: n2,
+                register2: n3,
+            },
+            (0x8, _, _, 0xE) => Self::ShiftLeft {
                 register1: n2,
                 register2: n3,
             },
@@ -171,6 +179,12 @@ impl Display for Instruction {
             }
             Instruction::SkipNotEqualByte { register, value } => {
                 write!(f, "SNE V{:X}, {:0>2X}", **register, value)
+            }
+            Instruction::ShiftLeft {
+                register1,
+                register2,
+            } => {
+                write!(f, "SHL V{:X} {{, V{:X}}}", **register1, **register2)
             }
             Instruction::ShiftRight {
                 register1,
