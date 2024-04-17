@@ -1,5 +1,5 @@
 use std::fmt;
-use anyhow::Result;
+use anyhow::{Result, Context};
 
 use crate::rom::Rom;
 use crate::Instruction;
@@ -112,7 +112,8 @@ impl Cpu {
 
     fn fetch_instruction(&mut self) -> Result<Instruction> {
         let instruction = self.memory.read_instruction(self.program_counter);
-        let instruction = Instruction::try_from_u16(instruction)?;
+        let instruction = Instruction::try_from_u16(instruction)
+            .with_context(|| format!("Error occoured at address 0x{:0>4X}", *self.program_counter))?;
 
         self.program_counter.increment();
 
@@ -317,3 +318,4 @@ mod tests {
         }
     }
 }
+

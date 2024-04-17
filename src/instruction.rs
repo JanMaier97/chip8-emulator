@@ -39,7 +39,7 @@ impl Instruction {
         let res = match (*n1, *n2, *n3, *n4) {
             (0x0, 0x0, 0xE, 0x0) => Self::ClearScreen,
             (0x0, _, _, _) => Err(anyhow!(
-                "Recieved machine instruction 0x{:0>4X} that cannot be handled",
+                "Unsupported instruction 0x{:0>4X} System call",
                 raw_instruction
             ))?,
             (0x1, _, _, _) => Self::Jump(join_to_u16(n2, n3, n4)),
@@ -66,7 +66,7 @@ impl Instruction {
             },
             (0xF, _, 0x6, 0x5) => Self::SetValuesFromMemory { register: n2 },
             (_, _, _, _) => Err(anyhow!(
-                "Found invalid instruction {:#04x}",
+                "Invalid instruction 0x{:0>4X}",
                 raw_instruction
             ))?,
         };

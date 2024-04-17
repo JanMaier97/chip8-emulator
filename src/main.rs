@@ -30,6 +30,7 @@ struct UiState {
     execution: CpuExecution,
     current_rom: String,
     result: Result<()>,
+    output: Vec<String>,
 }
 
 impl UiState {
@@ -40,12 +41,17 @@ impl UiState {
             execution: CpuExecution::Paused,
             current_rom: rom_path.to_string(),
             result: Ok(()),
+            output: Vec::new(),
         }
     }
 
     fn handle_tick(&mut self) {
         let result = self.cpu.tick();
+        if let Err(ref err) = result {
+            self.output.push(format!("{:?}", err));
+        }
         self.result = result;
+
     }
 
     fn is_paused(&self) -> bool {
@@ -69,7 +75,7 @@ async fn main() {
     loop {
         clear_background(RED);
 
-        if state.execution == CpuExecution::Running {
+        if state.is_running() {
             state.handle_tick();
         }
 
@@ -97,6 +103,7 @@ async fn main() {
                     ui.separator();
                     draw_roms(ui, &mut state, &roms);
                     ui.separator();
+                    draw_output(ui, &mut state);
                 });
 
             egui::TopBottomPanel::bottom("Memory")
@@ -301,6 +308,13 @@ fn draw_register_grid_content(ui: &mut egui::Ui, cpu: &Cpu) {
     ui.label(format!("{:0>4X}", cpu.registers.get_value(U4::new(15))));
 }
 
+fn draw_output(ui: &mut egui::Ui, state: &UiState) {
+    ui.heading("Output");
+    for line in state.output.iter() {
+        ui.label(line);
+    }
+}
+
 fn draw_screen(display: &Display) {
     const PIXEL_SIZE: f32 = 16.;
     const X_OFFSET: f32 = 448.;
@@ -326,6 +340,7 @@ fn draw_screen(display: &Display) {
         }
     }
 }
+
 
 fn window_conf() -> Conf {
     Conf {
