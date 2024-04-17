@@ -1,6 +1,6 @@
 mod memory;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use bits::U4;
 use cpu::Cpu;
 use display::Display;
@@ -29,37 +29,80 @@ struct UiState {
     cpu: Cpu,
     execution: CpuExecution,
     current_rom: String,
-    result: Result<()>,
+    has_failed: bool,
     output: Vec<String>,
 }
 
-impl UiState {
-    fn from_rom(rom_path: &str) -> Self {
-        let cpu = Cpu::from_rom(Rom::from_file(rom_path));
+impl Default for UiState {
+    fn default() -> Self {
         Self {
-            cpu,
+            cpu: Cpu::default(),
             execution: CpuExecution::Paused,
-            current_rom: rom_path.to_string(),
-            result: Ok(()),
+            current_rom: "".to_string(),
+            has_failed: true,
             output: Vec::new(),
         }
     }
+}
+
+impl UiState {
+    fn load_rom(&mut self, rom_path: &str) {
+        self.clear_output();
+        let rom =
+            Rom::from_file(rom_path).with_context(|| format!("Failed reading rom '{}'", rom_path));
+
+        self.handle_result(&rom);
+        let Ok(rom) = rom else {
+            return;
+        };
+
+        let cpu = Cpu::from_rom(rom)
+            .with_context(|| format!("Failed loading rom '{}' into memory", rom_path));
+
+        self.handle_result(&cpu);
+        let Ok(cpu) = cpu else {
+            return;
+        };
+
+        *self = Self {
+            cpu,
+            has_failed: false,
+            current_rom: rom_path.to_string(),
+            ..Default::default()
+        };
+    }
+
+    fn restart(&mut self) {
+        self.load_rom(&self.current_rom.clone());
+        self.execution = CpuExecution::Paused;
+    }
 
     fn handle_tick(&mut self) {
-        let result = self.cpu.tick();
+        let res = self.cpu.tick();
+        self.handle_result(&res);
+    }
+
+    fn handle_result<T>(&mut self, result: &Result<T>) {
         if let Err(ref err) = result {
             self.output.push(format!("{:?}", err));
+            self.has_failed = true;
         }
-        self.result = result;
-
     }
 
     fn is_paused(&self) -> bool {
-        self.result.is_ok() && self.execution == CpuExecution::Paused
+        !self.has_failed && self.execution == CpuExecution::Paused
     }
 
     fn is_running(&self) -> bool {
-        self.result.is_ok() && self.execution == CpuExecution::Running
+        !self.has_failed && self.execution == CpuExecution::Running
+    }
+
+    fn can_restart(&self) -> bool {
+        self.current_rom != ""
+    }
+
+    fn clear_output(&mut self) {
+        self.output.clear();
     }
 }
 
@@ -69,8 +112,9 @@ async fn main() {
         "./roms/ibm-logo.ch8",
         "./roms/SCTEST.ch8",
         "./roms/bc_test.ch8",
+        "./roms/xxx.ch8",
     ];
-    let mut state = UiState::from_rom(roms[0]);
+    let mut state = UiState::default();
 
     loop {
         clear_background(RED);
@@ -149,7 +193,7 @@ fn draw_degubbing_controlls(ui: &mut egui::Ui, state: &mut UiState) {
             }
         });
 
-        ui.add_enabled_ui(state.result.is_ok(), |ui| match state.execution {
+        ui.add_enabled_ui(!state.has_failed, |ui| match state.execution {
             CpuExecution::Paused => {
                 if ui.button("Continue").clicked() {
                     state.execution = CpuExecution::Running;
@@ -162,9 +206,11 @@ fn draw_degubbing_controlls(ui: &mut egui::Ui, state: &mut UiState) {
             }
         });
 
-        if ui.button("Restart").clicked() {
-            *state = UiState::from_rom(&state.current_rom);
-        }
+        ui.add_enabled_ui(state.can_restart(), |ui| {
+            if ui.button("Restart").clicked() {
+                state.restart();
+            }
+        });
     });
 }
 
@@ -172,7 +218,7 @@ fn draw_roms(ui: &mut egui::Ui, state: &mut UiState, roms: &[&str]) {
     ui.heading("Roms");
     for rom in roms {
         if ui.button(*rom).clicked() {
-            *state = UiState::from_rom(rom);
+            state.load_rom(rom);
         };
     }
 }
@@ -191,6 +237,7 @@ fn draw_instructions(ui: &mut egui::Ui, cpu: &Cpu) {
     let instructions = cpu
         .memory
         .read_slice(start, (HALF_COUNT * 4).into())
+        .unwrap()
         .chunks(2)
         .map(|c| join_bytes(c[0], c[1]))
         .collect::<Vec<_>>();
@@ -340,7 +387,6 @@ fn draw_screen(display: &Display) {
         }
     }
 }
-
 
 fn window_conf() -> Conf {
     Conf {

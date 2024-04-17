@@ -1,5 +1,5 @@
+use anyhow::{Context, Result};
 use std::fmt;
-use anyhow::{Result, Context};
 
 use crate::rom::Rom;
 use crate::Instruction;
@@ -58,8 +58,8 @@ pub struct Cpu {
     pub memory: Memory,
 }
 
-impl Cpu {
-    pub fn from_rom(rom: Rom) -> Self {
+impl Default for Cpu {
+    fn default() -> Self {
         Cpu {
             display: Display::new(),
             program_counter: MEMORY_START,
@@ -68,13 +68,31 @@ impl Cpu {
             delay_timer: 0,
             sound_timer: 0,
             registers: VariableRegisters::new(),
-            memory: Memory::from_rom(rom),
+            memory: Memory::new(),
         }
+    }
+}
+
+impl Cpu {
+    pub fn from_rom(rom: Rom) -> Result<Self> {
+        let cpu = Cpu {
+            memory: Memory::from_rom(rom)?,
+            ..Default::default()
+        };
+
+        Ok(cpu)
     }
 
     pub fn tick(&mut self) -> Result<()> {
-        let instruction = self.fetch_instruction()?;
+        let instruction = self
+            .fetch_instruction()
+            .with_context(|| "Error while fetching new instruction")?;
+        self.handle_instruction(instruction)
+            .with_context(|| format!("Error executing {}", instruction))?;
+        Ok(())
+    }
 
+    fn handle_instruction(&mut self, instruction: Instruction) -> Result<()> {
         match instruction {
             Instruction::AddValue { register, value } => self.registers.add_value(register, value),
             Instruction::CallSubroutine(addr) => {
@@ -86,13 +104,13 @@ impl Cpu {
                 register1,
                 register2,
                 sprite_length,
-            } => self.handle_draw_instruction(register1, register2, sprite_length),
+            } => self.handle_draw_instruction(register1, register2, sprite_length)?,
             Instruction::Jump(address) => self.program_counter.set(address),
             Instruction::SetIndex(new_index) => self.index.set(new_index),
             Instruction::SetValue { register, value } => self.registers.set_value(register, value),
             Instruction::SetValuesFromMemory { register } => {
                 // get as many bytes as registers need to be filled
-                let bytes = self.memory.read_slice(self.index, *register as usize + 1);
+                let bytes = self.memory.read_slice(self.index, *register as usize + 1)?;
                 for (register, byte) in bytes.iter().enumerate() {
                     let register = U4::new(register as u8);
                     self.registers.set_value(register, *byte);
@@ -112,21 +130,29 @@ impl Cpu {
 
     fn fetch_instruction(&mut self) -> Result<Instruction> {
         let instruction = self.memory.read_instruction(self.program_counter);
-        let instruction = Instruction::try_from_u16(instruction)
-            .with_context(|| format!("Error occoured at address 0x{:0>4X}", *self.program_counter))?;
+        let instruction = Instruction::try_from_u16(instruction).with_context(|| {
+            format!("Error occoured at address 0x{:0>4X}", *self.program_counter)
+        })?;
 
         self.program_counter.increment();
 
         return Ok(instruction);
     }
 
-    fn handle_draw_instruction(&mut self, x_register: U4, y_register: U4, sprite_length: U4) {
+    fn handle_draw_instruction(
+        &mut self,
+        x_register: U4,
+        y_register: U4,
+        sprite_length: U4,
+    ) -> Result<()> {
         let x_pos = self.registers.get_value(x_register);
         let y_pos = self.registers.get_value(y_register);
         let sprite = self
             .memory
-            .read_slice(self.index, usize::from(sprite_length));
+            .read_slice(self.index, usize::from(sprite_length))?;
         self.display.draw(x_pos, y_pos, sprite);
+
+        Ok(())
     }
 }
 
@@ -140,7 +166,7 @@ mod tests {
     fn correctly_set_index_register() {
         let instructions = vec![0xA234];
         let rom = Rom::from_raw_instructions(&instructions);
-        let mut cpu = Cpu::from_rom(rom);
+        let mut cpu = Cpu::from_rom(rom).unwrap();
 
         println!("{:0>4X?}", cpu.program_counter);
         println!("{:X?}", cpu.memory.read_slice(MEMORY_START, 4));
@@ -160,7 +186,7 @@ mod tests {
             .map(|(reg, value)| (0x6 << 12) + (reg << 8) + value)
             .collect::<Vec<_>>();
         let rom = Rom::from_raw_instructions(&instructions);
-        let mut cpu = Cpu::from_rom(rom);
+        let mut cpu = Cpu::from_rom(rom).unwrap();
 
         for (index, (reg, value)) in registers.zip(values).enumerate() {
             cpu.tick().unwrap();
@@ -195,7 +221,7 @@ mod tests {
             })
             .collect::<Vec<_>>();
         let rom = Rom::from_raw_instructions(&instructions);
-        let mut cpu = Cpu::from_rom(rom);
+        let mut cpu = Cpu::from_rom(rom).unwrap();
 
         for (index, ((reg, start_value), value)) in
             registers.zip(start_values).zip(add_values).enumerate()
@@ -218,7 +244,7 @@ mod tests {
     #[test]
     fn correctly_handles_call_subroutine_instruction() {
         let raw_instructions = vec![0x2345_u16];
-        let mut cpu = Cpu::from_rom(Rom::from_raw_instructions(&raw_instructions));
+        let mut cpu = Cpu::from_rom(Rom::from_raw_instructions(&raw_instructions)).unwrap();
 
         let original_address = *cpu.program_counter;
 
@@ -252,7 +278,7 @@ mod tests {
                 join_nibbles(0x3, register, 0, 0),     // compare register with 0x00
                 join_nibbles(0x3, register, *v1, *v2), // compare register with correct value
             ];
-            let mut cpu = Cpu::from_rom(Rom::from_raw_instructions(&raw_instructions));
+            let mut cpu = Cpu::from_rom(Rom::from_raw_instructions(&raw_instructions)).unwrap();
 
             cpu.tick().unwrap();
 
@@ -296,7 +322,7 @@ mod tests {
                 .map(|inst| split_instruction(*inst))
                 .flat_map(|(n1, n2, n3, n4)| vec![join_to_u8(n1, n2), join_to_u8(n3, n4)])
                 .collect::<Vec<_>>();
-            let mut cpu = Cpu::from_rom(Rom::from_raw_instructions(&raw_instructions));
+            let mut cpu = Cpu::from_rom(Rom::from_raw_instructions(&raw_instructions)).unwrap();
 
             raw_instructions.iter().for_each(|_| {
                 cpu.tick().unwrap();
@@ -318,4 +344,3 @@ mod tests {
         }
     }
 }
-

@@ -6,6 +6,7 @@ use crate::{
     memory::MemoryAddress,
 };
 
+#[derive(Clone, Copy)]
 pub enum Instruction {
     AddValue {
         register: U4,
@@ -65,10 +66,7 @@ impl Instruction {
                 sprite_length: n4,
             },
             (0xF, _, 0x6, 0x5) => Self::SetValuesFromMemory { register: n2 },
-            (_, _, _, _) => Err(anyhow!(
-                "Invalid instruction 0x{:0>4X}",
-                raw_instruction
-            ))?,
+            (_, _, _, _) => Err(anyhow!("Invalid instruction 0x{:0>4X}", raw_instruction))?,
         };
 
         Ok(res)

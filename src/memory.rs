@@ -1,6 +1,7 @@
+use anyhow::{anyhow, Result};
 use std::ops::{Deref, Index, IndexMut};
 
-use crate::{bits::U4, rom::Rom};
+use crate::rom::Rom;
 
 pub const MEMORY_START: MemoryAddress = MemoryAddress(0x200);
 pub const MEMORY_SIZE: usize = 4096;
@@ -60,10 +61,20 @@ pub struct Memory {
 }
 
 impl Memory {
-    pub fn from_rom(rom: Rom) -> Self {
+    pub fn new() -> Self {
+        Self {
+            data: [0; MEMORY_SIZE],
+        }
+    }
+
+    pub fn from_rom(rom: Rom) -> Result<Self> {
         let rom_start = MEMORY_START.0 as usize;
         if rom.data.len() > MEMORY_SIZE - rom_start {
-            panic!("Rom is too large")
+            return Err(anyhow!(
+                "Rom data exceeds the memory limit. Allowed: {:0>4X}, Actual: {:0>4X}",
+                MEMORY_SIZE - rom_start,
+                rom.data.len()
+            ));
         }
 
         let mut data = [0; MEMORY_SIZE];
@@ -76,7 +87,7 @@ impl Memory {
             data[rom_start + index] = rom_value;
         }
 
-        Memory { data }
+        Ok(Memory { data })
     }
 
     pub fn read_instruction(&self, address: MemoryAddress) -> u16 {
@@ -86,17 +97,17 @@ impl Memory {
         return (upper << 8) + lower;
     }
 
-    pub fn read_slice(&self, start: MemoryAddress, length: usize) -> &[u8] {
+    pub fn read_slice(&self, start: MemoryAddress, length: usize) -> Result<&[u8]> {
         let start = start.0 as usize;
         if start + length > MEMORY_SIZE {
-            panic!(
-                "Trying to access memory in range {}-{}, which is invalid",
+            return Err(anyhow!(
+                "Memory out of range: Cannot access memory in range 0x{:0>4X}-0x{:0>4X}",
                 start,
                 start + length
-            )
+            ));
         }
 
-        &self.data[start..start + length]
+        Ok(&self.data[start..start + length])
     }
 }
 

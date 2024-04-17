@@ -1,3 +1,4 @@
+use anyhow::{Context, Result};
 use std::io::BufReader;
 use std::{fs::File, io::Read};
 
@@ -18,13 +19,13 @@ impl Rom {
         Self { data: rom_data }
     }
 
-    pub fn from_file(file_path: &str) -> Self {
-        let mut file = File::open(file_path).unwrap();
+    pub fn from_file(file_path: &str) -> Result<Self> {
+        let mut file = File::open(file_path)?;
 
         let mut data = Vec::new();
-        file.read_to_end(&mut data).unwrap();
+        file.read_to_end(&mut data)?;
 
-        Self { data }
+        Ok(Self { data })
     }
 }
 

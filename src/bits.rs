@@ -1,5 +1,6 @@
 use std::ops::Deref;
 
+#[derive(Clone, Copy)]
 pub struct U4(u8);
 
 impl U4 {
