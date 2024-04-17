@@ -27,6 +27,7 @@ pub enum Instruction {
     LoadFont {
         register: U4,
     },
+    Return,
     SetIndex(u16),
     SetValue {
         register: U4,
@@ -57,6 +58,7 @@ impl Instruction {
         let (n1, n2, n3, n4) = split_instruction(raw_instruction);
         let res = match (*n1, *n2, *n3, *n4) {
             (0x0, 0x0, 0xE, 0x0) => Self::ClearScreen,
+            (0x0, 0x0, 0xE, 0xE) => Self::Return,
             (0x0, _, _, _) => Err(anyhow!(
                 "Unsupported instruction 0x{:0>4X} System call",
                 raw_instruction
@@ -130,6 +132,7 @@ impl Display for Instruction {
             ),
             Instruction::Jump(address) => write!(f, "JP {:0>4X}", address),
             Instruction::LoadFont { register } => write!(f, "LD F, V{:x}", **register),
+            Instruction::Return => write!(f, "RET"),
             Instruction::SetIndex(idx) => write!(f, "LD I, {:0>4X}", idx),
             Instruction::SetValue { register, value } => {
                 write!(f, "LD V{:X}, {:0>2X}", **register, value)

@@ -1,4 +1,4 @@
-use anyhow::{Context, Result};
+use anyhow::{anyhow, Context, Result};
 use std::fmt;
 
 use crate::rom::Rom;
@@ -87,8 +87,12 @@ impl Cpu {
         let instruction = self
             .fetch_instruction()
             .with_context(|| "Error while fetching new instruction")?;
+
+        self.program_counter.increment();
+
         self.handle_instruction(instruction)
             .with_context(|| format!("Error executing {}", instruction))?;
+
         Ok(())
     }
 
@@ -122,6 +126,12 @@ impl Cpu {
                 let value = self.registers.get_value(register);
                 let value = U4::new(value & 0b00001111);
                 self.index = self.memory.get_address_for_font(value);
+            }
+            Instruction::Return => {
+                let address = self.stack.pop().ok_or_else(|| {
+                    anyhow!("Tried to pop an address from the stack, but stack is empty")
+                })?;
+                self.program_counter = address;
             }
             Instruction::SetIndex(new_index) => self.index.set(new_index),
             Instruction::SetValue { register, value } => self.registers.set_value(register, value),
@@ -175,8 +185,6 @@ impl Cpu {
         let instruction = Instruction::try_from_u16(instruction).with_context(|| {
             format!("Error occoured at address 0x{:0>4X}", *self.program_counter)
         })?;
-
-        self.program_counter.increment();
 
         return Ok(instruction);
     }
@@ -562,6 +570,27 @@ mod tests {
             0,
             cpu.registers.get_value(U4::new(0xF)),
             "Flag register must be 0, if an underflow happens"
+        );
+    }
+
+    #[test]
+    fn correctly_handle_00ee_return_from_subroutine() {
+        let instructions = vec![
+            0x2204, // call subroutine
+            0x6000, // set v0 to 0
+            0x00EE, // return immediately
+        ];
+
+        let rom = Rom::from_raw_instructions(&instructions);
+        let mut cpu = Cpu::from_rom(rom).unwrap();
+
+        cpu.tick().unwrap();
+        cpu.tick().unwrap();
+
+        assert_eq!(0, cpu.stack.len(), "Stack should have been empty");
+        assert_eq!(
+            0x202, *cpu.program_counter,
+            "Program counter is at the wrong address after returning"
         );
     }
 }
