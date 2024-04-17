@@ -127,6 +127,13 @@ impl Cpu {
                 let value = U4::new(value & 0b00001111);
                 self.index = self.memory.get_address_for_font(value);
             }
+            Instruction::LoadRegisterFromRegister {
+                register1,
+                register2,
+            } => {
+                let value = self.registers.get_value(register2);
+                self.registers.set_value(register1, value);
+            }
             Instruction::Return => {
                 let address = self.stack.pop().ok_or_else(|| {
                     anyhow!("Tried to pop an address from the stack, but stack is empty")
@@ -591,6 +598,26 @@ mod tests {
         assert_eq!(
             0x202, *cpu.program_counter,
             "Program counter is at the wrong address after returning"
+        );
+    }
+
+    #[test]
+    fn correctly_handle_8xy0_load_register_from_register() {
+        let instructions = vec![
+            0x61E4, // set V1
+            0x8310, // set V3 from V1
+        ];
+
+        let rom = Rom::from_raw_instructions(&instructions);
+        let mut cpu = Cpu::from_rom(rom).unwrap();
+
+        cpu.tick().unwrap();
+        cpu.tick().unwrap();
+
+        assert_eq!(
+            0xE4,
+            cpu.registers.get_value(U4::new(0x3)),
+            "V3 should have the same value as V1"
         );
     }
 }

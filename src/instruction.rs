@@ -27,6 +27,10 @@ pub enum Instruction {
     LoadFont {
         register: U4,
     },
+    LoadRegisterFromRegister {
+        register1: U4,
+        register2: U4,
+    },
     Return,
     SetIndex(u16),
     SetValue {
@@ -83,6 +87,10 @@ impl Instruction {
                 register: n2,
                 value: join_to_u8(n3, n4),
             },
+            (0x8, _, _, 0x0) => Self::LoadRegisterFromRegister {
+                register1: n2,
+                register2: n3,
+            },
             (0x8, _, _, 0x4) => Self::AddRegisters {
                 register1: n2,
                 register2: n3,
@@ -132,6 +140,10 @@ impl Display for Instruction {
             ),
             Instruction::Jump(address) => write!(f, "JP {:0>4X}", address),
             Instruction::LoadFont { register } => write!(f, "LD F, V{:x}", **register),
+            Instruction::LoadRegisterFromRegister {
+                register1,
+                register2,
+            } => write!(f, "LD V{:X}, V{:X}", **register1, **register2),
             Instruction::Return => write!(f, "RET"),
             Instruction::SetIndex(idx) => write!(f, "LD I, {:0>4X}", idx),
             Instruction::SetValue { register, value } => {
