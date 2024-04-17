@@ -18,6 +18,29 @@ use macroquad::prelude::*;
 
 use crate::{bits::join_bytes, memory::MEMORY_SIZE};
 
+#[derive(PartialEq)]
+enum CpuExecution {
+    Paused,
+    Running,
+}
+
+struct UiState {
+    cpu: Cpu,
+    execution: CpuExecution,
+    current_rom: String,
+}
+
+impl UiState {
+    fn from_rom(rom_path: &str) -> Self {
+        let cpu = Cpu::from_rom(Rom::from_file(rom_path));
+        Self {
+            cpu,
+            execution: CpuExecution::Paused,
+            current_rom: rom_path.to_string(),
+        }
+    }
+}
+
 #[macroquad::main(window_conf)]
 async fn main() {
     let roms = vec![
@@ -25,11 +48,16 @@ async fn main() {
         "./roms/SCTEST.ch8",
         "./roms/bc_test.ch8",
     ];
-    let mut cpu = Cpu::from_rom(Rom::from_file(roms[0]));
+    let mut state = UiState::from_rom(roms[0]);
 
     loop {
         clear_background(RED);
-        draw_screen(&cpu.display);
+
+        if state.execution == CpuExecution::Running {
+            state.cpu.tick();
+        }
+
+        draw_screen(&state.cpu.display);
 
         egui_macroquad::ui(|egui_ctx| {
             egui::SidePanel::right("Instructions")
@@ -37,13 +65,13 @@ async fn main() {
                 .resizable(false)
                 .show(egui_ctx, |ui| {
                     ui.separator();
-                    draw_degubbing_controlls(ui, &mut cpu);
+                    draw_degubbing_controlls(ui, &mut state);
                     ui.separator();
-                    draw_instructions(ui, &cpu);
+                    draw_instructions(ui, &state.cpu);
                     ui.separator();
-                    draw_register_grid(ui, &cpu);
+                    draw_register_grid(ui, &state.cpu);
                     ui.separator();
-                    draw_stack(ui, &cpu);
+                    draw_stack(ui, &state.cpu);
                 });
 
             egui::SidePanel::left("Roms")
@@ -51,7 +79,7 @@ async fn main() {
                 .resizable(false)
                 .show(egui_ctx, |ui| {
                     ui.separator();
-                    draw_roms(ui, &mut cpu, &roms);
+                    draw_roms(ui, &mut state, &roms);
                     ui.separator();
                 });
 
@@ -90,19 +118,37 @@ fn draw_stack(ui: &mut egui::Ui, cpu: &Cpu) {
         });
 }
 
-fn draw_degubbing_controlls(ui: &mut egui::Ui, cpu: &mut Cpu) {
+fn draw_degubbing_controlls(ui: &mut egui::Ui, state: &mut UiState) {
     ui.horizontal(|ui| {
-        if ui.button("Step").clicked() {
-            cpu.tick();
+        ui.add_enabled_ui(state.execution == CpuExecution::Paused, |ui| {
+            if ui.button("Step").clicked() {
+                state.cpu.tick();
+            }
+        });
+
+        match state.execution {
+            CpuExecution::Paused => {
+                if ui.button("Continue").clicked() {
+                    state.execution = CpuExecution::Running;
+                }
+            }
+            CpuExecution::Running => {
+                if ui.button("Pause").clicked() {
+                    state.execution = CpuExecution::Paused;
+                }
+            }
+        }
+        if ui.button("Restart").clicked() {
+            *state = UiState::from_rom(&state.current_rom);
         }
     });
 }
 
-fn draw_roms(ui: &mut egui::Ui, cpu: &mut Cpu, roms: &[&str]) {
+fn draw_roms(ui: &mut egui::Ui, state: &mut UiState, roms: &[&str]) {
     ui.heading("Roms");
     for rom in roms {
         if ui.button(*rom).clicked() {
-            *cpu = Cpu::from_rom(Rom::from_file(&rom));
+            *state = UiState::from_rom(rom);
         };
     }
 }
