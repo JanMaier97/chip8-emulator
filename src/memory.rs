@@ -42,6 +42,10 @@ impl MemoryAddress {
     pub fn set(&mut self, value: u16) {
         self.0 = value;
     }
+
+    pub fn add(&self, value: u16) -> MemoryAddress {
+        MemoryAddress(self.0 + value)
+    }
 }
 
 impl From<MemoryAddress> for usize {

@@ -131,6 +131,15 @@ impl Cpu {
                     self.program_counter.increment();
                 }
             }
+            Instruction::StoreBcdRepresentation { register } => {
+                let value = self.registers.get_value(register);
+                let d0 = value / 100;
+                let d1 = (value % 100) / 10;
+                let d2 = value % 10;
+                self.memory[self.index] = d0;
+                self.memory[self.index.add(1)] = d1;
+                self.memory[self.index.add(2)] = d2;
+            }
         }
 
         Ok(())
@@ -413,5 +422,27 @@ mod tests {
 
         cpu.tick().unwrap();
         assert_eq!(0x19, *cpu.index);
+    }
+
+    #[test]
+    fn correctly_handle_fx33_store_decimal_conversion() {
+        let instructions = vec![
+            0x60FE, // store 254 in V0
+            0xA500, // set index to 0x500
+            0xF033, // convert V0 value to decimal
+        ];
+
+        let rom = Rom::from_raw_instructions(&instructions);
+        let mut cpu = Cpu::from_rom(rom).unwrap();
+
+        cpu.tick().unwrap();
+        cpu.tick().unwrap();
+        cpu.tick().unwrap();
+
+        let bytes = cpu.memory.read_slice(cpu.index, 3).unwrap();
+
+        assert_eq!(2, bytes[0]);
+        assert_eq!(5, bytes[1]);
+        assert_eq!(4, bytes[2]);
     }
 }

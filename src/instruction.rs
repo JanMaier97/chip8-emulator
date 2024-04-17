@@ -31,6 +31,9 @@ pub enum Instruction {
     SetValuesFromMemory {
         register: U4,
     },
+    StoreBcdRepresentation {
+        register: U4,
+    },
     SkipIfEqual {
         register: U4,
         value: u8,
@@ -77,6 +80,7 @@ impl Instruction {
                 sprite_length: n4,
             },
             (0xF, _, 0x2, 0x9) => Self::LoadFont { register: n2 },
+            (0xF, _, 0x3, 0x3) => Self::StoreBcdRepresentation { register: n2 },
             (0xF, _, 0x6, 0x5) => Self::SetValuesFromMemory { register: n2 },
             (_, _, _, _) => Err(anyhow!("Invalid instruction 0x{:0>4X}", raw_instruction))?,
         };
@@ -114,6 +118,9 @@ impl Display for Instruction {
             }
             Instruction::SkipNotEqualByte { register, value } => {
                 write!(f, "SNE V{:X}, {:0>2X}", **register, value)
+            }
+            Instruction::StoreBcdRepresentation { register } => {
+                write!(f, "LD B, V{:X}", **register)
             }
         }
     }
