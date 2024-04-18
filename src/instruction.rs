@@ -35,6 +35,10 @@ pub enum Instruction {
         register1: U4,
         register2: U4,
     },
+    Or {
+        register1: U4,
+        register2: U4,
+    },
     Return,
     SetIndex(u16),
     SetValue {
@@ -108,6 +112,10 @@ impl Instruction {
                 value: join_to_u8(n3, n4),
             },
             (0x8, _, _, 0x0) => Self::LoadRegisterFromRegister {
+                register1: n2,
+                register2: n3,
+            },
+            (0x8, _, _, 0x1) => Self::Or {
                 register1: n2,
                 register2: n3,
             },
@@ -190,6 +198,10 @@ impl Display for Instruction {
                 register1,
                 register2,
             } => write!(f, "LD V{:X}, V{:X}", **register1, **register2),
+            Instruction::Or {
+                register1,
+                register2,
+            } => write!(f, "OR V{:X}, V{:X}", **register1, **register2),
             Instruction::Return => write!(f, "RET"),
             Instruction::SetIndex(idx) => write!(f, "LD I, {:0>4X}", idx),
             Instruction::SetValue { register, value } => {

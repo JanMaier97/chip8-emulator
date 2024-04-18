@@ -142,6 +142,14 @@ impl Cpu {
                 let value = self.registers.get_value(register2);
                 self.registers.set_value(register1, value);
             }
+            Instruction::Or {
+                register1,
+                register2,
+            } => {
+                let value1 = self.registers.get_value(register1);
+                let value2 = self.registers.get_value(register2);
+                self.registers.set_value(register1, value1 | value2);
+            }
             Instruction::Return => {
                 let address = self.stack.pop().ok_or_else(|| {
                     anyhow!("Tried to pop an address from the stack, but stack is empty")
@@ -844,6 +852,24 @@ mod tests {
             0xEE & 0xA3,
             cpu.registers.get_value(U4::new(1)),
             "Register values have to be and-ed and stored to Vx"
+        );
+    }
+
+    #[test]
+    fn correctly_handle_8xy1_or_registers() {
+        let instructions = vec![0x61EE, 0x62A3, 0x8121];
+
+        let rom = Rom::from_raw_instructions(&instructions);
+        let mut cpu = Cpu::from_rom(rom).unwrap();
+
+        cpu.tick().unwrap();
+        cpu.tick().unwrap();
+        cpu.tick().unwrap();
+
+        assert_eq!(
+            0xEE | 0xA3,
+            cpu.registers.get_value(U4::new(1)),
+            "Register values have to be or-ed and stored to Vx"
         );
     }
 }
