@@ -197,6 +197,14 @@ impl Cpu {
                 self.memory[self.index.add(1)] = d1;
                 self.memory[self.index.add(2)] = d2;
             }
+            Instruction::Xor {
+                register1,
+                register2,
+            } => {
+                let value1 = self.registers.get_value(register1);
+                let value2 = self.registers.get_value(register2);
+                self.registers.set_value(register1, value1 ^ value2);
+            }
         }
 
         Ok(())
@@ -792,6 +800,24 @@ mod tests {
             0,
             cpu.registers.get_value(U4::new(0xF)),
             "VF has to be 0 if a bit has not been shifted out"
+        );
+    }
+
+    #[test]
+    fn correctly_handle_8xy3_xor_registers() {
+        let instructions = vec![0x61EE, 0x62A3, 0x8123];
+
+        let rom = Rom::from_raw_instructions(&instructions);
+        let mut cpu = Cpu::from_rom(rom).unwrap();
+
+        cpu.tick().unwrap();
+        cpu.tick().unwrap();
+        cpu.tick().unwrap();
+
+        assert_eq!(
+            0xEE ^ 0xA3,
+            cpu.registers.get_value(U4::new(1)),
+            "Register values have to be xor-ed and stored to Vx"
         );
     }
 }

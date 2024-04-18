@@ -67,6 +67,10 @@ pub enum Instruction {
         register: U4,
         value: u8,
     },
+    Xor {
+        register1: U4,
+        register2: U4,
+    },
 }
 
 impl Instruction {
@@ -100,6 +104,10 @@ impl Instruction {
                 value: join_to_u8(n3, n4),
             },
             (0x8, _, _, 0x0) => Self::LoadRegisterFromRegister {
+                register1: n2,
+                register2: n3,
+            },
+            (0x8, _, _, 0x3) => Self::Xor {
                 register1: n2,
                 register2: n3,
             },
@@ -203,6 +211,10 @@ impl Display for Instruction {
                 register1,
                 register2,
             } => write!(f, "SUBN V{:X}, V{:X}", **register1, **register2),
+            Instruction::Xor {
+                register1,
+                register2,
+            } => write!(f, "XOR V{:X}, V{:X}", **register1, **register2),
         }
     }
 }
