@@ -79,6 +79,10 @@ pub enum Instruction {
         register: U4,
         value: u8,
     },
+    SkipNotEqualRegisters {
+        register1: U4,
+        register2: U4,
+    },
     Xor {
         register1: U4,
         register2: U4,
@@ -155,6 +159,10 @@ impl Instruction {
                 register1: n2,
                 register2: n3,
             },
+            (0x9, _, _, 0x0) => Self::SkipNotEqualRegisters {
+                register1: n2,
+                register2: n3,
+            },
             (0xA, _, _, _) => Self::SetIndex(join_to_u16(n2, n3, n4)),
             (0xD, _, _, _) => Self::Draw {
                 register1: n2,
@@ -227,6 +235,12 @@ impl Display for Instruction {
             }
             Instruction::SkipNotEqualByte { register, value } => {
                 write!(f, "SNE V{:X}, {:0>2X}", **register, value)
+            }
+            Instruction::SkipNotEqualRegisters {
+                register1,
+                register2,
+            } => {
+                write!(f, "SNE V{:X}, {:X}", **register1, **register2)
             }
             Instruction::ShiftLeft {
                 register1,

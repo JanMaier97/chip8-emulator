@@ -196,6 +196,16 @@ impl Cpu {
                     self.program_counter.increment();
                 }
             }
+            Instruction::SkipNotEqualRegisters {
+                register1,
+                register2,
+            } => {
+                let value1 = self.registers.get_value(register1);
+                let value2 = self.registers.get_value(register2);
+                if value1 != value2 {
+                    self.program_counter.increment();
+                }
+            }
             Instruction::SubRegisters {
                 register1,
                 register2,
@@ -905,6 +915,31 @@ mod tests {
         assert_eq!(
             0x20C, *cpu.program_counter,
             "PC should have skipped ahead because V1 and V3 are equal"
+        );
+    }
+
+    #[test]
+    fn correctly_handle_9xy0_skip_if_registers_are_not_equal() {
+        let instructions = vec![0x61EE, 0x62EE, 0x63A3, 0x9120, 0x9130];
+
+        let rom = Rom::from_raw_instructions(&instructions);
+        let mut cpu = Cpu::from_rom(rom).unwrap();
+
+        cpu.tick().unwrap();
+        cpu.tick().unwrap();
+        cpu.tick().unwrap();
+        cpu.tick().unwrap();
+
+        assert_eq!(
+            0x208, *cpu.program_counter,
+            "PC should not have skipped ahead because V1 and V2 are equal"
+        );
+
+        cpu.tick().unwrap();
+
+        assert_eq!(
+            0x20C, *cpu.program_counter,
+            "PC should have skipped ahead because V1 and V3 are not equal"
         );
     }
 }
