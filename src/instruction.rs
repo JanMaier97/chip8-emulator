@@ -16,6 +16,10 @@ pub enum Instruction {
         register1: U4,
         register2: U4,
     },
+    And {
+        register1: U4,
+        register2: U4,
+    },
     CallSubroutine(MemoryAddress),
     ClearScreen,
     Draw {
@@ -107,6 +111,10 @@ impl Instruction {
                 register1: n2,
                 register2: n3,
             },
+            (0x8, _, _, 0x2) => Self::And {
+                register1: n2,
+                register2: n3,
+            },
             (0x8, _, _, 0x3) => Self::Xor {
                 register1: n2,
                 register2: n3,
@@ -150,6 +158,12 @@ impl Instruction {
 impl Display for Instruction {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match &self {
+            Instruction::And {
+                register1,
+                register2,
+            } => {
+                write!(f, "AND V{:X}, V{:X}", **register1, **register2)
+            }
             Instruction::AddValue { register, value } => {
                 write!(f, "ADD V{:X}, {:0>2X}", **register, *value)
             }

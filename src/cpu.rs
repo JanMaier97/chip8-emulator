@@ -111,6 +111,14 @@ impl Cpu {
                 let flag_value = if did_overflow { 1 } else { 0 };
                 self.registers.set_value(U4::new(0xF), flag_value);
             }
+            Instruction::And {
+                register1,
+                register2,
+            } => {
+                let value1 = self.registers.get_value(register1);
+                let value2 = self.registers.get_value(register2);
+                self.registers.set_value(register1, value1 & value2);
+            }
             Instruction::CallSubroutine(addr) => {
                 self.stack.push(self.program_counter);
                 self.program_counter = addr;
@@ -818,6 +826,24 @@ mod tests {
             0xEE ^ 0xA3,
             cpu.registers.get_value(U4::new(1)),
             "Register values have to be xor-ed and stored to Vx"
+        );
+    }
+
+    #[test]
+    fn correctly_handle_8xy2_and_registers() {
+        let instructions = vec![0x61EE, 0x62A3, 0x8122];
+
+        let rom = Rom::from_raw_instructions(&instructions);
+        let mut cpu = Cpu::from_rom(rom).unwrap();
+
+        cpu.tick().unwrap();
+        cpu.tick().unwrap();
+        cpu.tick().unwrap();
+
+        assert_eq!(
+            0xEE & 0xA3,
+            cpu.registers.get_value(U4::new(1)),
+            "Register values have to be and-ed and stored to Vx"
         );
     }
 }
