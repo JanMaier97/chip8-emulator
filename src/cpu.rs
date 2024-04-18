@@ -181,6 +181,16 @@ impl Cpu {
                     self.program_counter.increment();
                 }
             }
+            Instruction::SkipIfEqualRegisters {
+                register1,
+                register2,
+            } => {
+                let value1 = self.registers.get_value(register1);
+                let value2 = self.registers.get_value(register2);
+                if value1 == value2 {
+                    self.program_counter.increment();
+                }
+            }
             Instruction::SkipNotEqualByte { register, value } => {
                 if self.registers.get_value(register) != value {
                     self.program_counter.increment();
@@ -870,6 +880,31 @@ mod tests {
             0xEE | 0xA3,
             cpu.registers.get_value(U4::new(1)),
             "Register values have to be or-ed and stored to Vx"
+        );
+    }
+
+    #[test]
+    fn correctly_handle_5xy0_skip_if_registers_are_equal() {
+        let instructions = vec![0x61EE, 0x62A3, 0x63EE, 0x5120, 0x5130];
+
+        let rom = Rom::from_raw_instructions(&instructions);
+        let mut cpu = Cpu::from_rom(rom).unwrap();
+
+        cpu.tick().unwrap();
+        cpu.tick().unwrap();
+        cpu.tick().unwrap();
+        cpu.tick().unwrap();
+
+        assert_eq!(
+            0x208, *cpu.program_counter,
+            "PC should not have skipped ahead because V1 and V2 are not equal"
+        );
+
+        cpu.tick().unwrap();
+
+        assert_eq!(
+            0x20C, *cpu.program_counter,
+            "PC should have skipped ahead because V1 and V3 are equal"
         );
     }
 }
