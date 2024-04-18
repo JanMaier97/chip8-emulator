@@ -135,6 +135,15 @@ impl Cpu {
                 let value = U4::new(value & 0b00001111);
                 self.index = self.memory.get_address_for_font(value);
             }
+            Instruction::LoadRegistersFromMemory { register } => {
+                let count = *register + 1;
+                let bytes = self.memory.read_slice(self.index, count as usize)?;
+
+                for (idx, byte) in bytes.into_iter().enumerate() {
+                    let register = U4::new(idx as u8);
+                    self.registers.set_value(register, *byte);
+                }
+            }
             Instruction::LoadRegisterFromRegister {
                 register1,
                 register2,
@@ -158,14 +167,6 @@ impl Cpu {
             }
             Instruction::SetIndex(new_index) => self.index.set(new_index),
             Instruction::SetValue { register, value } => self.registers.set_value(register, value),
-            Instruction::SetValuesFromMemory { register } => {
-                // get as many bytes as registers need to be filled
-                let bytes = self.memory.read_slice(self.index, *register as usize + 1)?;
-                for (register, byte) in bytes.iter().enumerate() {
-                    let register = U4::new(register as u8);
-                    self.registers.set_value(register, *byte);
-                }
-            }
             Instruction::ShiftLeft { register1, .. } => {
                 let value = self.registers.get_value(register1);
                 self.registers.set_value(register1, value << 1);
@@ -233,6 +234,13 @@ impl Cpu {
                 self.memory[self.index.add(1)] = d1;
                 self.memory[self.index.add(2)] = d2;
             }
+            Instruction::WriteRegistersToMemory { register } => {
+                let bytes = (0..=*register)
+                    .map(|r| U4::new(r))
+                    .map(|r| self.registers.get_value(r))
+                    .collect::<Vec<_>>();
+                self.memory.write_slice(self.index, &bytes)?;
+            }
             Instruction::Xor {
                 register1,
                 register2,
@@ -280,7 +288,7 @@ impl Cpu {
 
 #[cfg(test)]
 mod tests {
-    use crate::bits::{join_nibbles, join_to_u8, split_instruction, split_u8};
+    use crate::bits::{join_nibbles, join_to_u8, split_instruction, split_u16, split_u8};
 
     use super::*;
 
@@ -941,5 +949,41 @@ mod tests {
             0x20C, *cpu.program_counter,
             "PC should have skipped ahead because V1 and V3 are not equal"
         );
+    }
+
+    #[test]
+    fn correctly_handle_fx55_store_registers_to_memory() {
+        let values: Vec<u8> = vec![
+            0x0c, 0xb3, 0x73, 0x34, 0x01, 0x34, 0x34, 0xa0, 0x25, 0xFF, 0x00, 0xb9, 0xd1, 0x87,
+            0xAB, 0xca,
+        ];
+
+        let mut instructions = values
+            .iter()
+            .enumerate()
+            .map(|(index, value)| ((index as u16) << 8) + *value as u16 + 0x6000)
+            .collect::<Vec<_>>();
+
+        instructions.push(0xA300);
+        instructions.push(0xFF55);
+
+        let rom = Rom::from_raw_instructions(&instructions);
+        let mut cpu = Cpu::from_rom(rom).unwrap();
+
+        instructions.iter().for_each(|_| cpu.tick().unwrap());
+
+        let bytes = cpu.memory.read_slice(cpu.index, 16).unwrap();
+        assert_eq!(0x300, *cpu.index, "Index register must not be changed");
+
+        for (index, (actual_value, expected_value)) in
+            bytes.into_iter().zip(values.into_iter()).enumerate()
+        {
+            let memory_position = 0x300 + index as u16;
+            assert_eq!(
+                expected_value, *actual_value,
+                "Expected the value {:X} of V{:X} to be stored at {:X}, but found {:X}",
+                expected_value, index, memory_position, *actual_value,
+            );
+        }
     }
 }

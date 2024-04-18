@@ -31,6 +31,9 @@ pub enum Instruction {
     LoadFont {
         register: U4,
     },
+    LoadRegistersFromMemory {
+        register: U4,
+    },
     LoadRegisterFromRegister {
         register1: U4,
         register2: U4,
@@ -44,9 +47,6 @@ pub enum Instruction {
     SetValue {
         register: U4,
         value: u8,
-    },
-    SetValuesFromMemory {
-        register: U4,
     },
     ShiftLeft {
         register1: U4,
@@ -82,6 +82,9 @@ pub enum Instruction {
     SkipNotEqualRegisters {
         register1: U4,
         register2: U4,
+    },
+    WriteRegistersToMemory {
+        register: U4,
     },
     Xor {
         register1: U4,
@@ -171,7 +174,8 @@ impl Instruction {
             },
             (0xF, _, 0x2, 0x9) => Self::LoadFont { register: n2 },
             (0xF, _, 0x3, 0x3) => Self::StoreBcdRepresentation { register: n2 },
-            (0xF, _, 0x6, 0x5) => Self::SetValuesFromMemory { register: n2 },
+            (0xF, _, 0x5, 0x5) => Self::WriteRegistersToMemory { register: n2 },
+            (0xF, _, 0x6, 0x5) => Self::LoadRegistersFromMemory { register: n2 },
             (_, _, _, _) => Err(anyhow!("Invalid instruction 0x{:0>4X}", raw_instruction))?,
         };
 
@@ -210,6 +214,9 @@ impl Display for Instruction {
             ),
             Instruction::Jump(address) => write!(f, "JP {:0>4X}", address),
             Instruction::LoadFont { register } => write!(f, "LD F, V{:x}", **register),
+            Instruction::LoadRegistersFromMemory { register } => {
+                write!(f, "LD V{:X}, [I]", **register)
+            }
             Instruction::LoadRegisterFromRegister {
                 register1,
                 register2,
@@ -223,7 +230,9 @@ impl Display for Instruction {
             Instruction::SetValue { register, value } => {
                 write!(f, "LD V{:X}, {:0>2X}", **register, value)
             }
-            Instruction::SetValuesFromMemory { register } => write!(f, "LD V{:X}, [I]", **register),
+            Instruction::WriteRegistersToMemory { register } => {
+                write!(f, "LD [I], V{:X}", **register)
+            }
             Instruction::SkipIfEqual { register, value } => {
                 write!(f, "SE V{:X}, {:0>2X}", **register, value)
             }

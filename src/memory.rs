@@ -109,6 +109,23 @@ impl Memory {
         return (upper << 8) + lower;
     }
 
+    pub fn write_slice(&mut self, start: MemoryAddress, bytes: &[u8]) -> Result<()> {
+        let start = usize::from(start);
+        if start + bytes.len() > MEMORY_SIZE {
+            return Err(anyhow!(
+                "Trying to write {} bytes at address {:0>4X} which excees valid memory",
+                bytes.len(),
+                start
+            ));
+        }
+
+        for (offset, byte) in bytes.iter().enumerate() {
+            self.data[start + offset] = *byte;
+        }
+
+        Ok(())
+    }
+
     pub fn read_slice(&self, start: MemoryAddress, length: usize) -> Result<&[u8]> {
         let start = start.0 as usize;
         if start + length > MEMORY_SIZE {
