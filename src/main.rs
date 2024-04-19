@@ -6,6 +6,7 @@ use anyhow::{anyhow, Context, Result};
 use bits::U4;
 use cpu::Cpu;
 use display::Display;
+use egui_extras::{Column, TableBuilder};
 use egui_macroquad::egui;
 use instruction::Instruction;
 use memory::{MemoryAddress, MEMORY_START};
@@ -32,6 +33,7 @@ struct UiState {
     execution: CpuExecution,
     current_rom: String,
     has_failed: bool,
+    has_ticked: bool,
     output: Vec<String>,
     memory_filter: String,
 }
@@ -43,6 +45,7 @@ impl Default for UiState {
             execution: CpuExecution::Paused,
             current_rom: "".to_string(),
             has_failed: true,
+            has_ticked: false,
             output: Vec::new(),
             memory_filter: "".to_string(),
         }
@@ -72,6 +75,7 @@ impl UiState {
             cpu,
             has_failed: false,
             current_rom: rom_path.to_string(),
+            has_ticked: true,
             ..Default::default()
         };
     }
@@ -83,6 +87,7 @@ impl UiState {
 
     fn handle_tick(&mut self) {
         let res = self.cpu.tick();
+        self.has_ticked = true;
         self.handle_result(&res);
     }
 
@@ -137,7 +142,7 @@ async fn main() {
                     ui.separator();
                     draw_degubbing_controlls(ui, &mut state);
                     ui.separator();
-                    draw_instructions(ui, &state.cpu);
+                    draw_instructions(ui, &mut state);
                     ui.separator();
                     draw_register_grid(ui, &state.cpu);
                     ui.separator();
@@ -418,20 +423,12 @@ fn draw_roms(ui: &mut egui::Ui, state: &mut UiState, roms: &[&str]) {
     }
 }
 
-fn draw_instructions(ui: &mut egui::Ui, cpu: &Cpu) {
-    const HALF_COUNT: u16 = 10;
-    const STEP: u16 = 2;
-
-    const MEM_OFFSET: u16 = HALF_COUNT * STEP - STEP;
-
-    let center_address = (MEM_OFFSET)
-        .max(*cpu.program_counter)
-        .min(MEMORY_SIZE as u16 - MEM_OFFSET);
-    let start = MemoryAddress::from_u16(center_address - MEM_OFFSET);
-
-    let instructions = cpu
+fn draw_instructions(ui: &mut egui::Ui, state: &mut UiState) {
+    let start = MemoryAddress::from_u16(0);
+    let instructions = state
+        .cpu
         .memory
-        .read_slice(start, (HALF_COUNT * 4).into())
+        .read_slice(start, MEMORY_SIZE)
         .unwrap()
         .chunks(2)
         .map(|c| join_bytes(c[0], c[1]))
@@ -439,34 +436,70 @@ fn draw_instructions(ui: &mut egui::Ui, cpu: &Cpu) {
 
     let start = usize::from(start);
     ui.heading("Instructions");
-    egui::Grid::new("instructions")
-        .num_columns(4)
-        .spacing([40.0, 4.0])
+    let text_height = egui::TextStyle::Body
+        .resolve(ui.style())
+        .size
+        .max(ui.spacing().interact_size.y);
+    let total_rows = instructions.len();
+
+    let mut table = TableBuilder::new(ui)
         .striped(true)
-        .show(ui, |ui| {
-            ui.label("");
-            ui.label("Address");
-            ui.label("Value");
-            ui.label("OpCode");
-            ui.end_row();
-            for (index, raw_instruction) in instructions.iter().enumerate() {
-                let current_address = start + STEP as usize * index;
-                if current_address == usize::from(cpu.program_counter) {
-                    ui.label("=>");
-                } else {
-                    ui.label("");
-                }
+        .max_scroll_height(text_height * 22.)
+        .cell_layout(egui::Layout::left_to_right(egui::Align::Center))
+        .column(Column::exact(20.))
+        .column(Column::exact(60.))
+        .column(Column::exact(60.))
+        .column(Column::remainder());
 
-                ui.label(format!("0x{:0>4X}", current_address));
-                ui.label(format!("0x{:0>4X}", raw_instruction));
-                if let Ok(instruction) = Instruction::try_from_u16(*raw_instruction) {
-                    ui.label(format!("{}", instruction));
-                } else {
-                    ui.label("???");
-                }
+    if state.has_ticked {
+        table = table.scroll_to_row(
+            *state.cpu.program_counter as usize / 2,
+            Some(egui::Align::TOP),
+        );
+        state.has_ticked = false;
+    }
 
-                ui.end_row();
-            }
+    table
+        .header(20.0, |mut header| {
+            header.col(|ui| {
+                ui.monospace("");
+            });
+            header.col(|ui| {
+                ui.monospace("Address");
+            });
+            header.col(|ui| {
+                ui.monospace("Value");
+            });
+            header.col(|ui| {
+                ui.monospace("OpCode");
+            });
+        })
+        .body(|body| {
+            body.rows(text_height, total_rows, |row_index, mut row| {
+                let raw_instruction = instructions[row_index];
+                let current_address = start + 2 * row_index;
+                row.col(|ui| {
+                    if current_address == usize::from(state.cpu.program_counter) {
+                        ui.label("=>");
+                    } else {
+                        ui.label("");
+                    }
+                });
+                row.col(|ui| {
+                    ui.monospace(format!("0x{:0>4X}", current_address));
+                });
+
+                row.col(|ui| {
+                    ui.monospace(format!("0x{:0>4X}", raw_instruction));
+                });
+                row.col(|ui| {
+                    if let Ok(instruction) = Instruction::try_from_u16(raw_instruction) {
+                        ui.monospace(format!("{}", instruction));
+                    } else {
+                        ui.monospace("???");
+                    }
+                });
+            });
         });
 }
 
