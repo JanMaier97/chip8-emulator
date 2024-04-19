@@ -1,6 +1,8 @@
 mod memory;
 
-use anyhow::{Context, Result};
+use std::collections::HashSet;
+
+use anyhow::{anyhow, Context, Result};
 use bits::U4;
 use cpu::Cpu;
 use display::Display;
@@ -31,6 +33,7 @@ struct UiState {
     current_rom: String,
     has_failed: bool,
     output: Vec<String>,
+    memory_filter: String,
 }
 
 impl Default for UiState {
@@ -41,6 +44,7 @@ impl Default for UiState {
             current_rom: "".to_string(),
             has_failed: true,
             output: Vec::new(),
+            memory_filter: "".to_string(),
         }
     }
 }
@@ -152,13 +156,204 @@ async fn main() {
 
             egui::TopBottomPanel::bottom("Memory")
                 .exact_height(400.0)
-                .show(egui_ctx, |ui| {});
+                .show(egui_ctx, |ui| {
+                    draw_memory_grid(ui, &mut state);
+                });
         });
 
         egui_macroquad::draw();
 
         next_frame().await
     }
+}
+
+fn draw_memory_grid(ui: &mut egui::Ui, state: &mut UiState) {
+    let step = 16;
+    let bytes = state
+        .cpu
+        .memory
+        .read_slice(MemoryAddress::from_u16(0), MEMORY_SIZE)
+        .unwrap();
+    let rows_of_bytes = bytes.chunks(16);
+    let mut byte_search = Vec::new();
+
+    let parse_result = handle_byte_search_conversion(&state.memory_filter);
+    let text_color = match parse_result {
+        Ok(_) => None,
+        Err(_) => Some(egui::Color32::RED),
+    };
+
+    if parse_result.is_ok() {
+        byte_search = parse_result.unwrap();
+    }
+
+    let byte_indexes_to_highlight = compute_byte_indexes_to_highlight(&byte_search, bytes);
+
+    ui.separator();
+    ui.horizontal(|ui| {
+        let text_edit = egui::TextEdit::singleline(&mut state.memory_filter)
+            .desired_width(120.0)
+            .text_color_opt(text_color);
+        ui.label("Search:");
+        ui.add(text_edit);
+    });
+
+    ui.separator();
+    egui::Grid::new("memory_header")
+        .num_columns(19)
+        // .spacing([40.0, 4.0])
+        .min_col_width(0.)
+        .striped(true)
+        .show(ui, |ui| {
+            ui.monospace("      ");
+            for i in 0..step {
+                ui.monospace(format!("{:0>2X}", i));
+                if i == 7 {
+                    ui.label("");
+                }
+            }
+            ui.monospace("");
+            ui.end_row();
+        });
+    egui::ScrollArea::vertical()
+        .max_height(300.)
+        .show(ui, |ui| {
+            egui::Grid::new("memory")
+                .num_columns(18)
+                // .spacing([40.0, 4.0])
+                .min_col_width(0.)
+                .striped(true)
+                .show(ui, |ui| {
+                    for (row_idx, bytes) in rows_of_bytes.enumerate() {
+                        ui.monospace(format!("0x{:0>4X}", row_idx * step));
+                        for (col_idx, b) in bytes.iter().enumerate() {
+                            let bg_color = if byte_indexes_to_highlight
+                                .contains(&(row_idx * step + col_idx))
+                            {
+                                egui::Color32::YELLOW
+                            } else {
+                                egui::Color32::TRANSPARENT
+                            };
+                            let text = egui::RichText::new(format!("{:0>2X}", b))
+                                .monospace()
+                                .background_color(bg_color);
+
+                            ui.monospace(text);
+                            if col_idx == 7 {
+                                ui.label("");
+                            }
+                        }
+                        let txt = bytes.iter().map(|b| byte_to_char(*b)).collect::<String>();
+                        ui.monospace(txt);
+                        ui.end_row()
+                    }
+                });
+        });
+    ui.separator();
+}
+
+fn compute_byte_indexes_to_highlight(expanded_search: &[Vec<u8>], bytes: &[u8]) -> HashSet<usize> {
+    if expanded_search.len() == 0 {
+        HashSet::new()
+    } else {
+        let window_len = expanded_search[0].len();
+        expanded_search
+            .into_iter()
+            .flat_map(|search| {
+                bytes
+                    .windows(window_len)
+                    .enumerate()
+                    .filter(|(_, window)| *window == search)
+                    .flat_map(|(idx, _)| idx..(idx + window_len))
+                    .collect::<HashSet<_>>()
+            })
+            .collect::<HashSet<_>>()
+    }
+}
+
+fn handle_byte_search_conversion(input: &str) -> Result<Vec<Vec<u8>>> {
+    let expanded_values = expand_byte_search(input);
+
+    let value = expanded_values
+        .iter()
+        .map(|v| parse_byte_search(v))
+        .collect::<Result<Vec<_>>>()?
+        .into_iter()
+        .collect::<Vec<_>>();
+
+    Ok(value)
+}
+
+fn parse_byte_search(value: &str) -> Result<Vec<u8>> {
+    if value == "" {
+        return Ok(vec![]);
+    }
+
+    if value.chars().any(|c| c != '?' && !c.is_ascii_hexdigit()) {
+        return Err(anyhow!("Invalid hex character"));
+    }
+
+    let value = if value.len() % 2 != 0 {
+        format! {"0{}", value}
+    } else {
+        value.to_string()
+    };
+
+    let reversed = value
+        .chars()
+        .rev()
+        .collect::<Vec<_>>()
+        .chunks(2)
+        .map(|chars| {
+            u8::from_str_radix(format!("{}{}", chars[1], chars[0]).as_str(), 16).with_context(|| "")
+        })
+        .rev()
+        .collect::<Result<Vec<u8>>>()?;
+
+    let mut single_char_value = value
+        .chars()
+        .rev()
+        .take(value.len() % 2)
+        .map(|c| u8::from_str_radix(&c.to_string(), 16).with_context(|| ""))
+        .collect::<Result<Vec<_>>>()?;
+
+    single_char_value.extend(reversed);
+    return Ok(single_char_value);
+}
+
+fn expand_byte_search(value: &str) -> Vec<String> {
+    if value == "" {
+        return vec![];
+    }
+    if !value.contains('?') {
+        return vec![value.to_string()];
+    }
+
+    let mut result = vec![value.to_string()];
+    for _ in value.chars().filter(|c| *c == '?') {
+        let mut temp = Vec::new();
+        for value in result.iter() {
+            for x in 0..16_u8 {
+                let replaced = value.replacen('?', format!("{:X}", x).as_str(), 1);
+                temp.push(replaced);
+            }
+        }
+        result = temp;
+    }
+
+    result
+}
+
+fn byte_to_char(byte: u8) -> char {
+    if !byte.is_ascii() {
+        return char::from(byte);
+    }
+
+    if byte.is_ascii_graphic() {
+        return char::from(byte);
+    }
+
+    '.'
 }
 
 fn draw_register_grid(ui: &mut egui::Ui, cpu: &Cpu) {
@@ -394,5 +589,102 @@ fn window_conf() -> Conf {
         window_height: 1080,
         window_width: 1920,
         ..Default::default()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn byte_search_expanded_correctly() {
+        assert_eq!(vec![vec![6]], handle_byte_search_conversion("6").unwrap());
+        assert_eq!(
+            vec![vec![0x76]],
+            handle_byte_search_conversion("76").unwrap()
+        );
+        assert_eq!(
+            vec![vec![0x7, 0x68]],
+            handle_byte_search_conversion("768").unwrap()
+        );
+        assert_eq!(
+            vec![
+                vec![0x0],
+                vec![0x1],
+                vec![0x2],
+                vec![0x3],
+                vec![0x4],
+                vec![0x5],
+                vec![0x6],
+                vec![0x7],
+                vec![0x8],
+                vec![0x9],
+                vec![0xA],
+                vec![0xB],
+                vec![0xC],
+                vec![0xD],
+                vec![0xE],
+                vec![0xF],
+            ],
+            handle_byte_search_conversion("?").unwrap()
+        );
+        assert_eq!(
+            vec![
+                vec![0xA0],
+                vec![0xA1],
+                vec![0xA2],
+                vec![0xA3],
+                vec![0xA4],
+                vec![0xA5],
+                vec![0xA6],
+                vec![0xA7],
+                vec![0xA8],
+                vec![0xA9],
+                vec![0xAA],
+                vec![0xAB],
+                vec![0xAC],
+                vec![0xAD],
+                vec![0xAE],
+                vec![0xAF],
+            ],
+            handle_byte_search_conversion("A?").unwrap()
+        );
+    }
+
+    #[test]
+    fn compute_byte_indexes_to_highlight_correclty_finds_indexes() {
+        let instructions = vec![0x6500, 0x6402];
+
+        let cpu = Cpu::from_rom(Rom::from_raw_instructions(&instructions)).unwrap();
+
+        let bytes = cpu.memory.read_slice(MEMORY_START, 10).unwrap();
+
+        let filter = "2";
+        let search = handle_byte_search_conversion(filter).unwrap();
+        let res = Vec::from_iter(compute_byte_indexes_to_highlight(&search, bytes));
+        assert_eq!(vec![3], res);
+
+        let filter = "64";
+        let search = handle_byte_search_conversion(filter).unwrap();
+        let res = Vec::from_iter(compute_byte_indexes_to_highlight(&search, bytes));
+        assert_eq!(vec![2], res);
+
+        let filter = "6402";
+        let search = handle_byte_search_conversion(filter).unwrap();
+        let mut res = Vec::from_iter(compute_byte_indexes_to_highlight(&search, bytes));
+        res.sort();
+        assert_eq!(vec![2, 3], res);
+
+        let filter = "6?";
+        let search = handle_byte_search_conversion(filter).unwrap();
+        let mut res = Vec::from_iter(compute_byte_indexes_to_highlight(&search, bytes));
+        res.sort();
+        assert_eq!(vec![0, 2], res);
+
+        let filter = "6?0?";
+        let search = handle_byte_search_conversion(filter).unwrap();
+        let mut res = Vec::from_iter(compute_byte_indexes_to_highlight(&search, bytes));
+        res.sort();
+        assert_eq!(vec![0, 1, 2, 3], res);
     }
 }
