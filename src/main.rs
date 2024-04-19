@@ -36,6 +36,8 @@ struct UiState {
     has_ticked: bool,
     output: Vec<String>,
     memory_filter: String,
+    breakpoint_input: String,
+    breakpoint_addresses: Vec<u16>,
 }
 
 impl Default for UiState {
@@ -48,6 +50,8 @@ impl Default for UiState {
             has_ticked: false,
             output: Vec::new(),
             memory_filter: "".to_string(),
+            breakpoint_input: "".to_string(),
+            breakpoint_addresses: Vec::new(),
         }
     }
 }
@@ -76,6 +80,7 @@ impl UiState {
             has_failed: false,
             current_rom: rom_path.to_string(),
             has_ticked: true,
+            breakpoint_addresses: self.breakpoint_addresses.clone(),
             ..Default::default()
         };
     }
@@ -89,6 +94,12 @@ impl UiState {
         let res = self.cpu.tick();
         self.has_ticked = true;
         self.handle_result(&res);
+        if self
+            .breakpoint_addresses
+            .contains(&*self.cpu.program_counter)
+        {
+            self.execution = CpuExecution::Paused;
+        }
     }
 
     fn handle_result<T>(&mut self, result: &Result<T>) {
@@ -155,6 +166,8 @@ async fn main() {
                 .show(egui_ctx, |ui| {
                     ui.separator();
                     draw_roms(ui, &mut state, &roms);
+                    ui.separator();
+                    draw_break_point_list(ui, &mut state);
                     ui.separator();
                     draw_output(ui, &mut state);
                 });
@@ -447,6 +460,7 @@ fn draw_instructions(ui: &mut egui::Ui, state: &mut UiState) {
         .max_scroll_height(text_height * 22.)
         .cell_layout(egui::Layout::left_to_right(egui::Align::Center))
         .column(Column::exact(20.))
+        .column(Column::exact(20.))
         .column(Column::exact(60.))
         .column(Column::exact(60.))
         .column(Column::remainder());
@@ -465,6 +479,9 @@ fn draw_instructions(ui: &mut egui::Ui, state: &mut UiState) {
                 ui.monospace("");
             });
             header.col(|ui| {
+                ui.monospace("");
+            });
+            header.col(|ui| {
                 ui.monospace("Address");
             });
             header.col(|ui| {
@@ -479,10 +496,24 @@ fn draw_instructions(ui: &mut egui::Ui, state: &mut UiState) {
                 let raw_instruction = instructions[row_index];
                 let current_address = start + 2 * row_index;
                 row.col(|ui| {
-                    if current_address == usize::from(state.cpu.program_counter) {
-                        ui.label("=>");
+                    if state
+                        .breakpoint_addresses
+                        .contains(&(current_address as u16))
+                    {
+                        ui.label(
+                            egui::RichText::new(">")
+                                .monospace()
+                                .background_color(egui::Color32::RED),
+                        );
                     } else {
-                        ui.label("");
+                        ui.monospace(" ");
+                    }
+                });
+                row.col(|ui| {
+                    if current_address == usize::from(state.cpu.program_counter) {
+                        ui.monospace("=>");
+                    } else {
+                        ui.monospace("");
                     }
                 });
                 row.col(|ui| {
@@ -622,6 +653,60 @@ fn window_conf() -> Conf {
         window_height: 1080,
         window_width: 1920,
         ..Default::default()
+    }
+}
+
+fn draw_break_point_list(ui: &mut egui::Ui, state: &mut UiState) {
+    ui.heading("Break Points");
+    ui.horizontal(|ui| {
+        let text_color = if state.breakpoint_input.len() != 4
+            || state
+                .breakpoint_input
+                .chars()
+                .any(|c| !c.is_ascii_hexdigit())
+        {
+            Some(egui::Color32::RED)
+        } else {
+            None
+        };
+
+        let text_edit = egui::TextEdit::singleline(&mut state.breakpoint_input)
+            .desired_width(120.0)
+            .text_color_opt(text_color);
+
+        ui.label("New breakpoint:");
+        ui.add(text_edit);
+        ui.add_enabled_ui(text_color == None, |ui| {
+            if ui.button("Add").clicked() {
+                let address = u16::from_str_radix(&state.breakpoint_input, 16).unwrap();
+                if !state.breakpoint_addresses.contains(&address) {
+                    state.breakpoint_addresses.push(address);
+                    state.breakpoint_addresses.sort();
+                }
+                state.breakpoint_input = "".to_string();
+            }
+        });
+    });
+
+    ui.separator();
+
+    let mut label_idx_to_remove = Option::None;
+    for address in state.breakpoint_addresses.iter() {
+        ui.horizontal(|ui| {
+            ui.monospace(format!("0x{:0>4X}", address));
+            if ui.button("X").clicked() {
+                label_idx_to_remove = state
+                    .breakpoint_addresses
+                    .iter()
+                    .enumerate()
+                    .find(|(_, a)| *a == address)
+                    .map(|(idx, _)| idx)
+            }
+        });
+    }
+
+    if let Some(idx) = label_idx_to_remove {
+        state.breakpoint_addresses.remove(idx);
     }
 }
 
