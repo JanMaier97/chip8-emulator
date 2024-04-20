@@ -147,6 +147,9 @@ impl Cpu {
                 let value = U4::new(value & 0b00001111);
                 self.index = self.memory.get_address_for_font(value);
             }
+            Instruction::LoadRegisterFromDelayTimer { register } => {
+                self.registers.set_value(register, self.delay_timer);
+            }
             Instruction::LoadRegistersFromMemory { register } => {
                 let count = *register + 1;
                 let bytes = self.memory.read_slice(self.index, count as usize)?;
@@ -1067,14 +1070,15 @@ mod tests {
     }
 
     #[test]
-    fn correctly_handle_fx15_load_sound_timer() {
-        let instructions = vec![0x65A1, 0xF515];
+    fn correctly_handle_fx07_load_register_from_delay_timer() {
+        let instructions = vec![0xF607];
         let rom = Rom::from_raw_instructions(&instructions);
         let mut cpu = Cpu::from_rom(rom).unwrap();
 
-        cpu.tick().unwrap();
+        cpu.delay_timer = 0xF1;
+
         cpu.tick().unwrap();
 
-        assert_eq!(0xA1, cpu.delay_timer);
+        assert_eq!(0xF1, cpu.registers.get_value(U4::new(6)));
     }
 }
