@@ -134,6 +134,10 @@ impl Cpu {
                 sprite_length,
             } => self.handle_draw_instruction(register1, register2, sprite_length)?,
             Instruction::Jump(address) => self.program_counter.set(address),
+            Instruction::JumpWithOffset(address) => {
+                let offset = self.registers.get_value(U4::new(0));
+                self.program_counter.set(address + offset as u16);
+            }
             Instruction::LoadFont { register } => {
                 let value = self.registers.get_value(register);
                 let value = U4::new(value & 0b00001111);
@@ -1007,5 +1011,17 @@ mod tests {
         cpu.tick().unwrap();
 
         assert_eq!(0x03 + 0xA6, *cpu.index);
+    }
+
+    #[test]
+    fn correctly_handle_bnnn_jump_with_offset() {
+        let instructions = vec![0x60A1, 0xB521];
+        let rom = Rom::from_raw_instructions(&instructions);
+        let mut cpu = Cpu::from_rom(rom).unwrap();
+
+        cpu.tick().unwrap();
+        cpu.tick().unwrap();
+
+        assert_eq!(0xA1 + 0x521, *cpu.program_counter);
     }
 }

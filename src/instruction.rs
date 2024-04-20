@@ -31,6 +31,7 @@ pub enum Instruction {
         sprite_length: U4,
     },
     Jump(u16),
+    JumpWithOffset(u16),
     LoadFont {
         register: U4,
     },
@@ -170,6 +171,7 @@ impl Instruction {
                 register2: n3,
             },
             (0xA, _, _, _) => Self::SetIndex(join_to_u16(n2, n3, n4)),
+            (0xB, _, _, _) => Self::JumpWithOffset(join_to_u16(n2, n3, n4)),
             (0xD, _, _, _) => Self::Draw {
                 register1: n2,
                 register2: n3,
@@ -218,6 +220,7 @@ impl Display for Instruction {
                 **register1, **register2, **sprite_length
             ),
             Instruction::Jump(address) => write!(f, "JP {:0>4X}", address),
+            Instruction::JumpWithOffset(address) => write!(f, "JP V0, {:0>4X}", address),
             Instruction::LoadFont { register } => write!(f, "LD F, V{:x}", **register),
             Instruction::LoadRegistersFromMemory { register } => {
                 write!(f, "LD V{:X}, [I]", **register)
