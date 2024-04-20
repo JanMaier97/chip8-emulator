@@ -42,6 +42,9 @@ pub enum Instruction {
         register1: U4,
         register2: U4,
     },
+    LoadSoundTimer {
+        register: U4,
+    },
     Or {
         register1: U4,
         register2: U4,
@@ -185,6 +188,7 @@ impl Instruction {
                 register2: n3,
                 sprite_length: n4,
             },
+            (0xF, _, 0x1, 0x8) => Self::LoadSoundTimer { register: n2 },
             (0xF, _, 0x1, 0xE) => Self::AddRegisterToIndex { register: n2 },
             (0xF, _, 0x2, 0x9) => Self::LoadFont { register: n2 },
             (0xF, _, 0x3, 0x3) => Self::StoreBcdRepresentation { register: n2 },
@@ -237,6 +241,7 @@ impl Display for Instruction {
                 register1,
                 register2,
             } => write!(f, "LD V{:X}, V{:X}", **register1, **register2),
+            Instruction::LoadSoundTimer { register } => write!(f, "LD ST, V{:X}", **register),
             Instruction::Or {
                 register1,
                 register2,

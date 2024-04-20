@@ -161,6 +161,9 @@ impl Cpu {
                 let value = self.registers.get_value(register2);
                 self.registers.set_value(register1, value);
             }
+            Instruction::LoadSoundTimer { register } => {
+                self.sound_timer = self.registers.get_value(register);
+            }
             Instruction::Or {
                 register1,
                 register2,
@@ -1046,5 +1049,17 @@ mod tests {
         cpu.tick().unwrap();
 
         assert_eq!(0xA1 + 0x521, *cpu.program_counter);
+    }
+
+    #[test]
+    fn correctly_handle_fx18_load_sound_timer() {
+        let instructions = vec![0x65A1, 0xF518];
+        let rom = Rom::from_raw_instructions(&instructions);
+        let mut cpu = Cpu::from_rom(rom).unwrap();
+
+        cpu.tick().unwrap();
+        cpu.tick().unwrap();
+
+        assert_eq!(0xA1, cpu.sound_timer);
     }
 }
