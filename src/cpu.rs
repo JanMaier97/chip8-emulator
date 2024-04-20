@@ -152,6 +152,7 @@ impl Cpu {
                     let register = U4::new(idx as u8);
                     self.registers.set_value(register, *byte);
                 }
+                self.index = self.index.add(count as u16);
             }
             Instruction::LoadRegisterFromRegister {
                 register1,
@@ -504,7 +505,14 @@ mod tests {
 
             raw_instructions.iter().for_each(|_| {
                 cpu.tick().unwrap();
+                dbg!(cpu.index);
             });
+
+            assert_eq!(
+                0x200 + current_register as u16 + 1,
+                *cpu.index,
+                "Index register is set to the address of the last written byte"
+            );
 
             for reg in 0..=current_register {
                 let register = U4::new(reg);
