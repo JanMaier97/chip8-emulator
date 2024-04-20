@@ -98,6 +98,10 @@ impl Cpu {
 
     fn handle_instruction(&mut self, instruction: Instruction) -> Result<()> {
         match instruction {
+            Instruction::AddRegisterToIndex { register } => {
+                let value = self.registers.get_value(register);
+                self.index = self.index.add(value as u16);
+            }
             Instruction::AddValue { register, value } => self.registers.add_value(register, value),
             Instruction::AddRegisters {
                 register1,
@@ -985,5 +989,23 @@ mod tests {
                 expected_value, index, memory_position, *actual_value,
             );
         }
+    }
+
+    #[test]
+    fn correctly_handle_fx1e_add_register_to_index() {
+        let instructions = vec![0x6103, 0x65A6, 0xF11E, 0xF51E];
+
+        let rom = Rom::from_raw_instructions(&instructions);
+        let mut cpu = Cpu::from_rom(rom).unwrap();
+
+        cpu.tick().unwrap();
+        cpu.tick().unwrap();
+        cpu.tick().unwrap();
+
+        assert_eq!(0x03, *cpu.index);
+
+        cpu.tick().unwrap();
+
+        assert_eq!(0x03 + 0xA6, *cpu.index);
     }
 }

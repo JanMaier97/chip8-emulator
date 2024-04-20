@@ -12,6 +12,9 @@ pub enum Instruction {
         register: U4,
         value: u8,
     },
+    AddRegisterToIndex {
+        register: U4,
+    },
     AddRegisters {
         register1: U4,
         register2: U4,
@@ -172,6 +175,7 @@ impl Instruction {
                 register2: n3,
                 sprite_length: n4,
             },
+            (0xF, _, 0x1, 0xE) => Self::AddRegisterToIndex { register: n2 },
             (0xF, _, 0x2, 0x9) => Self::LoadFont { register: n2 },
             (0xF, _, 0x3, 0x3) => Self::StoreBcdRepresentation { register: n2 },
             (0xF, _, 0x5, 0x5) => Self::WriteRegistersToMemory { register: n2 },
@@ -186,6 +190,7 @@ impl Instruction {
 impl Display for Instruction {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match &self {
+            Instruction::AddRegisterToIndex { register } => write!(f, "ADD I, V{:X})", **register),
             Instruction::And {
                 register1,
                 register2,
