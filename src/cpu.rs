@@ -1,4 +1,5 @@
 use anyhow::{anyhow, Context, Result};
+use rand::Rng;
 use std::fmt;
 
 use crate::rom::Rom;
@@ -166,6 +167,10 @@ impl Cpu {
                 let value1 = self.registers.get_value(register1);
                 let value2 = self.registers.get_value(register2);
                 self.registers.set_value(register1, value1 | value2);
+            }
+            Instruction::Random { register, mask } => {
+                let rnd = rand::thread_rng().gen::<u8>();
+                self.registers.set_value(register, rnd & mask);
             }
             Instruction::Return => {
                 let address = self.stack.pop().ok_or_else(|| {

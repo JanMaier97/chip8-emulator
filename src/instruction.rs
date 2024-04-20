@@ -46,6 +46,10 @@ pub enum Instruction {
         register1: U4,
         register2: U4,
     },
+    Random {
+        register: U4,
+        mask: u8,
+    },
     Return,
     SetIndex(u16),
     SetValue {
@@ -172,6 +176,10 @@ impl Instruction {
             },
             (0xA, _, _, _) => Self::SetIndex(join_to_u16(n2, n3, n4)),
             (0xB, _, _, _) => Self::JumpWithOffset(join_to_u16(n2, n3, n4)),
+            (0xC, _, _, _) => Self::Random {
+                register: n2,
+                mask: join_to_u8(n3, n4),
+            },
             (0xD, _, _, _) => Self::Draw {
                 register1: n2,
                 register2: n3,
@@ -233,6 +241,9 @@ impl Display for Instruction {
                 register1,
                 register2,
             } => write!(f, "OR V{:X}, V{:X}", **register1, **register2),
+            Instruction::Random { register, mask } => {
+                write!(f, "RND V{:X}, {:0>2X}", **register, mask)
+            }
             Instruction::Return => write!(f, "RET"),
             Instruction::SetIndex(idx) => write!(f, "LD I, {:0>4X}", idx),
             Instruction::SetValue { register, value } => {
