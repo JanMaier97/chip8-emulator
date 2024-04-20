@@ -32,6 +32,9 @@ pub enum Instruction {
     },
     Jump(u16),
     JumpWithOffset(u16),
+    LoadDelayTimer {
+        register: U4,
+    },
     LoadFont {
         register: U4,
     },
@@ -188,6 +191,7 @@ impl Instruction {
                 register2: n3,
                 sprite_length: n4,
             },
+            (0xF, _, 0x1, 0x5) => Self::LoadDelayTimer { register: n2 },
             (0xF, _, 0x1, 0x8) => Self::LoadSoundTimer { register: n2 },
             (0xF, _, 0x1, 0xE) => Self::AddRegisterToIndex { register: n2 },
             (0xF, _, 0x2, 0x9) => Self::LoadFont { register: n2 },
@@ -233,6 +237,7 @@ impl Display for Instruction {
             ),
             Instruction::Jump(address) => write!(f, "JP {:0>4X}", address),
             Instruction::JumpWithOffset(address) => write!(f, "JP V0, {:0>4X}", address),
+            Instruction::LoadDelayTimer { register } => write!(f, "LD DT, V{:X}", **register),
             Instruction::LoadFont { register } => write!(f, "LD F, V{:x}", **register),
             Instruction::LoadRegistersFromMemory { register } => {
                 write!(f, "LD V{:X}, [I]", **register)

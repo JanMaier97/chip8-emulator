@@ -139,6 +139,9 @@ impl Cpu {
                 let offset = self.registers.get_value(U4::new(0));
                 self.program_counter.set(address + offset as u16);
             }
+            Instruction::LoadDelayTimer { register } => {
+                self.delay_timer = self.registers.get_value(register);
+            }
             Instruction::LoadFont { register } => {
                 let value = self.registers.get_value(register);
                 let value = U4::new(value & 0b00001111);
@@ -1061,5 +1064,17 @@ mod tests {
         cpu.tick().unwrap();
 
         assert_eq!(0xA1, cpu.sound_timer);
+    }
+
+    #[test]
+    fn correctly_handle_fx15_load_sound_timer() {
+        let instructions = vec![0x65A1, 0xF515];
+        let rom = Rom::from_raw_instructions(&instructions);
+        let mut cpu = Cpu::from_rom(rom).unwrap();
+
+        cpu.tick().unwrap();
+        cpu.tick().unwrap();
+
+        assert_eq!(0xA1, cpu.delay_timer);
     }
 }
