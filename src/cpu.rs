@@ -254,6 +254,7 @@ impl Cpu {
                     .map(|r| self.registers.get_value(r))
                     .collect::<Vec<_>>();
                 self.memory.write_slice(self.index, &bytes)?;
+                self.index = self.index.add(*register as u16 + 1);
             }
             Instruction::Xor {
                 register1,
@@ -985,7 +986,8 @@ mod tests {
             .map(|(index, value)| ((index as u16) << 8) + *value as u16 + 0x6000)
             .collect::<Vec<_>>();
 
-        instructions.push(0xA300);
+        let index_start = 0x300;
+        instructions.push(0xA000 + index_start);
         instructions.push(0xFF55);
 
         let rom = Rom::from_raw_instructions(&instructions);
@@ -993,13 +995,21 @@ mod tests {
 
         instructions.iter().for_each(|_| cpu.tick().unwrap());
 
-        let bytes = cpu.memory.read_slice(cpu.index, 16).unwrap();
-        assert_eq!(0x300, *cpu.index, "Index register must not be changed");
+        let bytes = cpu
+            .memory
+            .read_slice(MemoryAddress::from_u16(index_start as u16), 16)
+            .unwrap();
+
+        assert_eq!(
+            index_start + values.len() as u16,
+            *cpu.index,
+            "Index register must be set to the address of the last loaded byte"
+        );
 
         for (index, (actual_value, expected_value)) in
             bytes.into_iter().zip(values.into_iter()).enumerate()
         {
-            let memory_position = 0x300 + index as u16;
+            let memory_position = index_start + index as u16;
             assert_eq!(
                 expected_value, *actual_value,
                 "Expected the value {:X} of V{:X} to be stored at {:X}, but found {:X}",
