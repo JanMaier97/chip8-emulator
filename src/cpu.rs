@@ -263,8 +263,7 @@ impl<T: Keypad + Default> Cpu<T> {
             } => {
                 let value1 = self.registers.get_value(register1);
                 let value2 = self.registers.get_value(register2);
-                let result = self.handle_sub(value1, value2);
-                self.registers.set_value(register1, result);
+                self.handle_sub(value1, value2, register1);
             }
             Instruction::SubRegistersReversed {
                 register1,
@@ -272,8 +271,7 @@ impl<T: Keypad + Default> Cpu<T> {
             } => {
                 let value1 = self.registers.get_value(register1);
                 let value2 = self.registers.get_value(register2);
-                let result = self.handle_sub(value2, value1);
-                self.registers.set_value(register1, result);
+                self.handle_sub(value2, value1, register1);
             }
             Instruction::StoreBcdRepresentation { register } => {
                 let value = self.registers.get_value(register);
@@ -305,10 +303,12 @@ impl<T: Keypad + Default> Cpu<T> {
         Ok(())
     }
 
-    fn handle_sub(&mut self, lhs: u8, rhs: u8) -> u8 {
+    fn handle_sub(&mut self, lhs: u8, rhs: u8, target_register: U4) {
+        let result = lhs.wrapping_sub(rhs);
+        self.registers.set_value(target_register, result);
+
         let flag_value = if lhs >= rhs { 1 } else { 0 };
         self.registers.set_value(U4::new(0xF), flag_value);
-        lhs.wrapping_sub(rhs)
     }
 
     fn fetch_instruction(&mut self) -> Result<Instruction> {
@@ -1203,6 +1203,74 @@ mod tests {
         assert_eq!(
             0x208, *cpu.program_counter,
             "Should skip if the pressed key is different from the register value"
+        );
+    }
+
+    #[test]
+    fn set_carry_flag_after_calculation_for_f8xy5_with_underflow() {
+        let instructions = vec![0x60FF, 0x6F05, 0x8F05];
+        let rom = Rom::from_raw_instructions(&instructions);
+        let mut cpu = Cpu::<MockKeypad>::from_rom(rom).unwrap();
+
+        cpu.tick().unwrap();
+        cpu.tick().unwrap();
+        cpu.tick().unwrap();
+
+        assert_eq!(
+            0,
+            cpu.registers.get_value(U4::new(0xF)),
+            "Flag register must be set to 0 at the end of the operation"
+        );
+    }
+
+    #[test]
+    fn set_carry_flag_after_calculation_for_f8xy5_without_underflow() {
+        let instructions = vec![0x6005, 0x6FFF, 0x8F05];
+        let rom = Rom::from_raw_instructions(&instructions);
+        let mut cpu = Cpu::<MockKeypad>::from_rom(rom).unwrap();
+
+        cpu.tick().unwrap();
+        cpu.tick().unwrap();
+        cpu.tick().unwrap();
+
+        assert_eq!(
+            1,
+            cpu.registers.get_value(U4::new(0xF)),
+            "Flag register must be set to 1 at the end of the operation"
+        );
+    }
+
+    #[test]
+    fn set_carry_flag_after_calculation_for_f8xy7_with_underflow() {
+        let instructions = vec![0x600F, 0x6FFF, 0x8F07];
+        let rom = Rom::from_raw_instructions(&instructions);
+        let mut cpu = Cpu::<MockKeypad>::from_rom(rom).unwrap();
+
+        cpu.tick().unwrap();
+        cpu.tick().unwrap();
+        cpu.tick().unwrap();
+
+        assert_eq!(
+            0,
+            cpu.registers.get_value(U4::new(0xF)),
+            "Flag register must be set to 0 at the end of the operation"
+        );
+    }
+
+    #[test]
+    fn set_carry_flag_after_calculation_for_f8xy7_without_underflow() {
+        let instructions = vec![0x60FF, 0x6F05, 0x8F07];
+        let rom = Rom::from_raw_instructions(&instructions);
+        let mut cpu = Cpu::<MockKeypad>::from_rom(rom).unwrap();
+
+        cpu.tick().unwrap();
+        cpu.tick().unwrap();
+        cpu.tick().unwrap();
+
+        assert_eq!(
+            1,
+            cpu.registers.get_value(U4::new(0xF)),
+            "Flag register must be set to 1 at the end of the operation"
         );
     }
 }
