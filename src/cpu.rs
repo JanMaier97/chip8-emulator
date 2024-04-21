@@ -4,6 +4,7 @@ use std::fmt;
 
 use crate::keypad::Keypad;
 use crate::rom::Rom;
+use crate::timer::Timer;
 use crate::Instruction;
 use crate::MEMORY_START;
 use crate::U4;
@@ -11,6 +12,8 @@ use crate::{
     display::Display,
     memory::{Memory, MemoryAddress},
 };
+
+pub const INSTRUCTION_RATE: u64 = 700;
 
 pub struct VariableRegisters {
     registers: [u8; 16],
@@ -54,7 +57,7 @@ pub struct Cpu<TKeypad: Keypad + Default> {
     pub program_counter: MemoryAddress,
     pub index: MemoryAddress,
     pub stack: Vec<MemoryAddress>,
-    pub delay_timer: u8,
+    pub delay_timer: Timer,
     pub sound_timer: u8,
     pub registers: VariableRegisters,
     pub memory: Memory,
@@ -68,7 +71,7 @@ impl<T: Keypad + Default> Default for Cpu<T> {
             program_counter: MEMORY_START,
             index: MemoryAddress::from_u16(0),
             stack: Vec::new(),
-            delay_timer: 0,
+            delay_timer: Timer::with_cpu_rate(INSTRUCTION_RATE),
             sound_timer: 0,
             registers: VariableRegisters::new(),
             memory: Memory::new(),
@@ -92,6 +95,7 @@ impl<T: Keypad + Default> Cpu<T> {
             .fetch_instruction()
             .with_context(|| "Error while fetching new instruction")?;
 
+        self.delay_timer.tick();
         self.program_counter.increment();
 
         self.handle_instruction(instruction)
@@ -143,7 +147,7 @@ impl<T: Keypad + Default> Cpu<T> {
                 self.program_counter.set(address + offset as u16);
             }
             Instruction::LoadDelayTimer { register } => {
-                self.delay_timer = self.registers.get_value(register);
+                self.delay_timer.set(self.registers.get_value(register));
             }
             Instruction::LoadFont { register } => {
                 let value = self.registers.get_value(register);
@@ -159,7 +163,7 @@ impl<T: Keypad + Default> Cpu<T> {
                 self.registers.set_value(register, value);
             }
             Instruction::LoadRegisterFromDelayTimer { register } => {
-                self.registers.set_value(register, self.delay_timer);
+                self.registers.set_value(register, self.delay_timer.get());
             }
             Instruction::LoadRegistersFromMemory { register } => {
                 let count = *register + 1;
@@ -1108,7 +1112,7 @@ mod tests {
         cpu.tick().unwrap();
         cpu.tick().unwrap();
 
-        assert_eq!(0xA1, cpu.delay_timer);
+        assert_eq!(0xA1, cpu.delay_timer.get());
     }
 
     #[test]
@@ -1117,7 +1121,7 @@ mod tests {
         let rom = Rom::from_raw_instructions(&instructions);
         let mut cpu = Cpu::<MockKeypad>::from_rom(rom).unwrap();
 
-        cpu.delay_timer = 0xF1;
+        cpu.delay_timer.set(0xF1);
 
         cpu.tick().unwrap();
 

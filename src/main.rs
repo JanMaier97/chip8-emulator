@@ -4,7 +4,7 @@ use std::collections::HashSet;
 
 use anyhow::{anyhow, Context, Result};
 use bits::U4;
-use cpu::Cpu;
+use cpu::{Cpu, INSTRUCTION_RATE};
 use display::Display;
 use egui_extras::{Column, TableBuilder};
 use egui_macroquad::egui;
@@ -19,6 +19,7 @@ mod display;
 mod instruction;
 mod keypad;
 mod rom;
+mod timer;
 
 use macroquad::prelude::*;
 
@@ -77,10 +78,14 @@ impl Keypad for MacroquadKeypad {
     }
 
     fn get_pressed_key(&self) -> Option<u8> {
-        let Some(key) = macroquad::input::get_last_key_pressed() else {
+        let Some(key) = self
+            .keys
+            .iter()
+            .find(|k| macroquad::input::is_key_released(**k))
+        else {
             return None;
         };
-        self.convert_keycode(key)
+        self.convert_keycode(*key)
     }
 }
 
@@ -194,6 +199,7 @@ async fn main() {
         "./roms/ibm-logo.ch8",
         "./roms/SCTEST.ch8",
         "./roms/bc_test.ch8",
+        "./roms/delay_timer_test.ch8",
         "./roms/test_suite/1-chip8-logo.ch8",
         "./roms/test_suite/2-ibm-logo.ch8",
         "./roms/test_suite/3-corax+.ch8",
@@ -208,8 +214,11 @@ async fn main() {
     loop {
         clear_background(RED);
 
-        if state.is_running() {
-            state.handle_tick();
+        let instructions_per_frame = INSTRUCTION_RATE / 60;
+        for _ in 0..instructions_per_frame {
+            if state.is_running() {
+                state.handle_tick();
+            }
         }
 
         draw_screen(&state.cpu.display);
@@ -646,7 +655,7 @@ fn draw_register_grid_content(ui: &mut egui::Ui, state: &UiState) {
     ui.end_row();
 
     ui.label("DT:");
-    ui.label(format!("{:0>4X}", cpu.delay_timer));
+    ui.label(format!("{:0>4X}", cpu.delay_timer.get()));
 
     ui.label("ST:");
     ui.label(format!("{:0>4X}", cpu.sound_timer));
