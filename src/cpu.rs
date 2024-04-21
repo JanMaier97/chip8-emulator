@@ -207,13 +207,13 @@ impl<T: Keypad + Default> Cpu<T> {
             }
             Instruction::SetIndex(new_index) => self.index.set(new_index),
             Instruction::SetValue { register, value } => self.registers.set_value(register, value),
-            Instruction::ShiftLeft { register1, .. } => {
-                let value = self.registers.get_value(register1);
+            Instruction::ShiftLeft { register1, register2 } => {
+                let value = self.registers.get_value(register2);
                 self.registers.set_value(register1, value << 1);
                 self.registers.set_value(U4::new(0xF), value >> 7);
             }
-            Instruction::ShiftRight { register1, .. } => {
-                let value = self.registers.get_value(register1);
+            Instruction::ShiftRight { register1, register2 } => {
+                let value = self.registers.get_value(register2);
                 self.registers.set_value(register1, value >> 1);
                 self.registers.set_value(U4::new(0xF), value & 1);
             }
@@ -832,10 +832,10 @@ mod tests {
     #[test]
     fn correctly_handle_8xy6_shift_register_right() {
         let instructions = vec![
-            0x63FF, // set V1
+            0x63E1, // set V3
             0x61E1, // set V1
             0x8136, // right shift
-            0x61E0, // set V1
+            0x63E0, // set V3
             0x8136, // right shift
         ];
 
@@ -875,10 +875,10 @@ mod tests {
     #[test]
     fn correctly_handle_8xye_shift_register_left() {
         let instructions = vec![
-            0x63FF, // set V3
-            0x6187, // set V1
+            0x6387, // set V3
+            0x61FF, // set V1
             0x813E, // left shift
-            0x6177, // set V1
+            0x6377, // set V3
             0x813E, // left shift
         ];
 
