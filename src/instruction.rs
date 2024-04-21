@@ -38,6 +38,9 @@ pub enum Instruction {
     LoadFont {
         register: U4,
     },
+    LoadRegisterFromKeyPress {
+        register: U4,
+    },
     LoadRegisterFromDelayTimer {
         register: U4,
     },
@@ -95,6 +98,12 @@ pub enum Instruction {
     SkipNotEqualByte {
         register: U4,
         value: u8,
+    },
+    SkipIfKeyPressed {
+        register: U4,
+    },
+    SkipIfKeyNotPressed {
+        register: U4,
     },
     SkipNotEqualRegisters {
         register1: U4,
@@ -194,7 +203,10 @@ impl Instruction {
                 register2: n3,
                 sprite_length: n4,
             },
+            (0xE, _, 0x9, 0xE) => Self::SkipIfKeyPressed { register: n2 },
+            (0xE, _, 0xA, 0x1) => Self::SkipIfKeyNotPressed { register: n2 },
             (0xF, _, 0x0, 0x7) => Self::LoadRegisterFromDelayTimer { register: n2 },
+            (0xF, _, 0x0, 0xA) => Self::LoadRegisterFromKeyPress { register: n2 },
             (0xF, _, 0x1, 0x5) => Self::LoadDelayTimer { register: n2 },
             (0xF, _, 0x1, 0x8) => Self::LoadSoundTimer { register: n2 },
             (0xF, _, 0x1, 0xE) => Self::AddRegisterToIndex { register: n2 },
@@ -310,10 +322,15 @@ impl Display for Instruction {
                 register1,
                 register2,
             } => write!(f, "SUBN V{:X}, V{:X}", **register1, **register2),
+            Instruction::LoadRegisterFromKeyPress { register } => {
+                write!(f, "LD V{:X}, K", **register)
+            }
             Instruction::Xor {
                 register1,
                 register2,
             } => write!(f, "XOR V{:X}, V{:X}", **register1, **register2),
+            Instruction::SkipIfKeyPressed { register } => write!(f, "SKP V{:X}", **register),
+            Instruction::SkipIfKeyNotPressed { register } => write!(f, "SKNP V{:X}", **register),
         }
     }
 }

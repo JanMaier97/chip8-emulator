@@ -35,6 +35,10 @@ impl MemoryAddress {
         MemoryAddress(value)
     }
 
+    pub fn decrement(&mut self) {
+        self.0 -= 2;
+    }
+
     pub fn increment(&mut self) {
         self.0 += 2;
     }

@@ -2,6 +2,7 @@ use anyhow::{anyhow, Context, Result};
 use rand::Rng;
 use std::fmt;
 
+use crate::keypad::Keypad;
 use crate::rom::Rom;
 use crate::Instruction;
 use crate::MEMORY_START;
@@ -48,7 +49,7 @@ impl fmt::Debug for VariableRegisters {
     }
 }
 
-pub struct Cpu {
+pub struct Cpu<TKeypad: Keypad + Default> {
     pub display: Display,
     pub program_counter: MemoryAddress,
     pub index: MemoryAddress,
@@ -57,9 +58,10 @@ pub struct Cpu {
     pub sound_timer: u8,
     pub registers: VariableRegisters,
     pub memory: Memory,
+    keypad: TKeypad,
 }
 
-impl Default for Cpu {
+impl<T: Keypad + Default> Default for Cpu<T> {
     fn default() -> Self {
         Cpu {
             display: Display::new(),
@@ -70,11 +72,12 @@ impl Default for Cpu {
             sound_timer: 0,
             registers: VariableRegisters::new(),
             memory: Memory::new(),
+            keypad: T::default(),
         }
     }
 }
 
-impl Cpu {
+impl<T: Keypad + Default> Cpu<T> {
     pub fn from_rom(rom: Rom) -> Result<Self> {
         let cpu = Cpu {
             memory: Memory::from_rom(rom)?,
@@ -147,6 +150,14 @@ impl Cpu {
                 let value = U4::new(value & 0b00001111);
                 self.index = self.memory.get_address_for_font(value);
             }
+            Instruction::LoadRegisterFromKeyPress { register } => {
+                let Some(value) = self.keypad.get_pressed_key() else {
+                    self.program_counter.decrement();
+                    return Ok(());
+                };
+
+                self.registers.set_value(register, value);
+            }
             Instruction::LoadRegisterFromDelayTimer { register } => {
                 self.registers.set_value(register, self.delay_timer);
             }
@@ -202,6 +213,18 @@ impl Cpu {
             }
             Instruction::SkipIfEqual { register, value } => {
                 if self.registers.get_value(register) == value {
+                    self.program_counter.increment();
+                }
+            }
+            Instruction::SkipIfKeyPressed { register } => {
+                let value = self.registers.get_value(register);
+                if self.keypad.is_key_down(value) {
+                    self.program_counter.increment();
+                }
+            }
+            Instruction::SkipIfKeyNotPressed { register } => {
+                let value = self.registers.get_value(register);
+                if !self.keypad.is_key_down(value) {
                     self.program_counter.increment();
                 }
             }
@@ -312,7 +335,10 @@ impl Cpu {
 
 #[cfg(test)]
 mod tests {
-    use crate::bits::{join_nibbles, join_to_u8, split_instruction, split_u16, split_u8};
+    use crate::{
+        bits::{join_nibbles, join_to_u8, split_instruction, split_u16, split_u8},
+        keypad::MockKeypad,
+    };
 
     use super::*;
 
@@ -320,7 +346,7 @@ mod tests {
     fn correctly_set_index_register() {
         let instructions = vec![0xA234];
         let rom = Rom::from_raw_instructions(&instructions);
-        let mut cpu = Cpu::from_rom(rom).unwrap();
+        let mut cpu = Cpu::<MockKeypad>::from_rom(rom).unwrap();
 
         println!("{:0>4X?}", cpu.program_counter);
         println!("{:X?}", cpu.memory.read_slice(MEMORY_START, 4));
@@ -340,7 +366,7 @@ mod tests {
             .map(|(reg, value)| (0x6 << 12) + (reg << 8) + value)
             .collect::<Vec<_>>();
         let rom = Rom::from_raw_instructions(&instructions);
-        let mut cpu = Cpu::from_rom(rom).unwrap();
+        let mut cpu = Cpu::<MockKeypad>::from_rom(rom).unwrap();
 
         for (index, (reg, value)) in registers.zip(values).enumerate() {
             cpu.tick().unwrap();
@@ -375,7 +401,7 @@ mod tests {
             })
             .collect::<Vec<_>>();
         let rom = Rom::from_raw_instructions(&instructions);
-        let mut cpu = Cpu::from_rom(rom).unwrap();
+        let mut cpu = Cpu::<MockKeypad>::from_rom(rom).unwrap();
 
         for (index, ((reg, start_value), value)) in
             registers.zip(start_values).zip(add_values).enumerate()
@@ -398,7 +424,8 @@ mod tests {
     #[test]
     fn correctly_handles_call_subroutine_instruction() {
         let raw_instructions = vec![0x2345_u16];
-        let mut cpu = Cpu::from_rom(Rom::from_raw_instructions(&raw_instructions)).unwrap();
+        let mut cpu =
+            Cpu::<MockKeypad>::from_rom(Rom::from_raw_instructions(&raw_instructions)).unwrap();
 
         let original_address = *cpu.program_counter;
 
@@ -432,7 +459,8 @@ mod tests {
                 join_nibbles(0x3, register, 0, 0),     // compare register with 0x00
                 join_nibbles(0x3, register, *v1, *v2), // compare register with correct value
             ];
-            let mut cpu = Cpu::from_rom(Rom::from_raw_instructions(&raw_instructions)).unwrap();
+            let mut cpu =
+                Cpu::<MockKeypad>::from_rom(Rom::from_raw_instructions(&raw_instructions)).unwrap();
 
             cpu.tick().unwrap();
 
@@ -467,7 +495,8 @@ mod tests {
                 join_nibbles(0x4, register, *v1, *v2), // compare register with correct value
                 join_nibbles(0x4, register, 0, 0),     // compare register with 0x00
             ];
-            let mut cpu = Cpu::from_rom(Rom::from_raw_instructions(&raw_instructions)).unwrap();
+            let mut cpu =
+                Cpu::<MockKeypad>::from_rom(Rom::from_raw_instructions(&raw_instructions)).unwrap();
 
             cpu.tick().unwrap();
 
@@ -511,7 +540,8 @@ mod tests {
                 .map(|inst| split_instruction(*inst))
                 .flat_map(|(n1, n2, n3, n4)| vec![join_to_u8(n1, n2), join_to_u8(n3, n4)])
                 .collect::<Vec<_>>();
-            let mut cpu = Cpu::from_rom(Rom::from_raw_instructions(&raw_instructions)).unwrap();
+            let mut cpu =
+                Cpu::<MockKeypad>::from_rom(Rom::from_raw_instructions(&raw_instructions)).unwrap();
 
             raw_instructions.iter().for_each(|_| {
                 cpu.tick().unwrap();
@@ -552,7 +582,7 @@ mod tests {
         ];
 
         let rom = Rom::from_raw_instructions(&instructions);
-        let mut cpu = Cpu::from_rom(rom).unwrap();
+        let mut cpu = Cpu::<MockKeypad>::from_rom(rom).unwrap();
 
         cpu.tick().unwrap();
         cpu.tick().unwrap();
@@ -577,7 +607,7 @@ mod tests {
         ];
 
         let rom = Rom::from_raw_instructions(&instructions);
-        let mut cpu = Cpu::from_rom(rom).unwrap();
+        let mut cpu = Cpu::<MockKeypad>::from_rom(rom).unwrap();
 
         cpu.tick().unwrap();
         cpu.tick().unwrap();
@@ -603,7 +633,7 @@ mod tests {
         ];
 
         let rom = Rom::from_raw_instructions(&instructions);
-        let mut cpu = Cpu::from_rom(rom).unwrap();
+        let mut cpu = Cpu::<MockKeypad>::from_rom(rom).unwrap();
 
         cpu.tick().unwrap();
         cpu.tick().unwrap();
@@ -650,7 +680,7 @@ mod tests {
         ];
 
         let rom = Rom::from_raw_instructions(&instructions);
-        let mut cpu = Cpu::from_rom(rom).unwrap();
+        let mut cpu = Cpu::<MockKeypad>::from_rom(rom).unwrap();
 
         cpu.tick().unwrap();
         cpu.tick().unwrap();
@@ -697,7 +727,7 @@ mod tests {
         ];
 
         let rom = Rom::from_raw_instructions(&instructions);
-        let mut cpu = Cpu::from_rom(rom).unwrap();
+        let mut cpu = Cpu::<MockKeypad>::from_rom(rom).unwrap();
 
         cpu.tick().unwrap();
         cpu.tick().unwrap();
@@ -740,7 +770,7 @@ mod tests {
         ];
 
         let rom = Rom::from_raw_instructions(&instructions);
-        let mut cpu = Cpu::from_rom(rom).unwrap();
+        let mut cpu = Cpu::<MockKeypad>::from_rom(rom).unwrap();
 
         cpu.tick().unwrap();
         cpu.tick().unwrap();
@@ -760,7 +790,7 @@ mod tests {
         ];
 
         let rom = Rom::from_raw_instructions(&instructions);
-        let mut cpu = Cpu::from_rom(rom).unwrap();
+        let mut cpu = Cpu::<MockKeypad>::from_rom(rom).unwrap();
 
         cpu.tick().unwrap();
         cpu.tick().unwrap();
@@ -780,7 +810,7 @@ mod tests {
         ];
 
         let rom = Rom::from_raw_instructions(&instructions);
-        let mut cpu = Cpu::from_rom(rom).unwrap();
+        let mut cpu = Cpu::<MockKeypad>::from_rom(rom).unwrap();
 
         cpu.tick().unwrap();
         cpu.tick().unwrap();
@@ -803,7 +833,7 @@ mod tests {
         ];
 
         let rom = Rom::from_raw_instructions(&instructions);
-        let mut cpu = Cpu::from_rom(rom).unwrap();
+        let mut cpu = Cpu::<MockKeypad>::from_rom(rom).unwrap();
 
         cpu.tick().unwrap();
         cpu.tick().unwrap();
@@ -846,7 +876,7 @@ mod tests {
         ];
 
         let rom = Rom::from_raw_instructions(&instructions);
-        let mut cpu = Cpu::from_rom(rom).unwrap();
+        let mut cpu = Cpu::<MockKeypad>::from_rom(rom).unwrap();
 
         cpu.tick().unwrap();
         cpu.tick().unwrap();
@@ -883,7 +913,7 @@ mod tests {
         let instructions = vec![0x61EE, 0x62A3, 0x8123];
 
         let rom = Rom::from_raw_instructions(&instructions);
-        let mut cpu = Cpu::from_rom(rom).unwrap();
+        let mut cpu = Cpu::<MockKeypad>::from_rom(rom).unwrap();
 
         cpu.tick().unwrap();
         cpu.tick().unwrap();
@@ -901,7 +931,7 @@ mod tests {
         let instructions = vec![0x61EE, 0x62A3, 0x8122];
 
         let rom = Rom::from_raw_instructions(&instructions);
-        let mut cpu = Cpu::from_rom(rom).unwrap();
+        let mut cpu = Cpu::<MockKeypad>::from_rom(rom).unwrap();
 
         cpu.tick().unwrap();
         cpu.tick().unwrap();
@@ -919,7 +949,7 @@ mod tests {
         let instructions = vec![0x61EE, 0x62A3, 0x8121];
 
         let rom = Rom::from_raw_instructions(&instructions);
-        let mut cpu = Cpu::from_rom(rom).unwrap();
+        let mut cpu = Cpu::<MockKeypad>::from_rom(rom).unwrap();
 
         cpu.tick().unwrap();
         cpu.tick().unwrap();
@@ -937,7 +967,7 @@ mod tests {
         let instructions = vec![0x61EE, 0x62A3, 0x63EE, 0x5120, 0x5130];
 
         let rom = Rom::from_raw_instructions(&instructions);
-        let mut cpu = Cpu::from_rom(rom).unwrap();
+        let mut cpu = Cpu::<MockKeypad>::from_rom(rom).unwrap();
 
         cpu.tick().unwrap();
         cpu.tick().unwrap();
@@ -962,7 +992,7 @@ mod tests {
         let instructions = vec![0x61EE, 0x62EE, 0x63A3, 0x9120, 0x9130];
 
         let rom = Rom::from_raw_instructions(&instructions);
-        let mut cpu = Cpu::from_rom(rom).unwrap();
+        let mut cpu = Cpu::<MockKeypad>::from_rom(rom).unwrap();
 
         cpu.tick().unwrap();
         cpu.tick().unwrap();
@@ -1000,7 +1030,7 @@ mod tests {
         instructions.push(0xFF55);
 
         let rom = Rom::from_raw_instructions(&instructions);
-        let mut cpu = Cpu::from_rom(rom).unwrap();
+        let mut cpu = Cpu::<MockKeypad>::from_rom(rom).unwrap();
 
         instructions.iter().for_each(|_| cpu.tick().unwrap());
 
@@ -1032,7 +1062,7 @@ mod tests {
         let instructions = vec![0x6103, 0x65A6, 0xF11E, 0xF51E];
 
         let rom = Rom::from_raw_instructions(&instructions);
-        let mut cpu = Cpu::from_rom(rom).unwrap();
+        let mut cpu = Cpu::<MockKeypad>::from_rom(rom).unwrap();
 
         cpu.tick().unwrap();
         cpu.tick().unwrap();
@@ -1049,7 +1079,7 @@ mod tests {
     fn correctly_handle_bnnn_jump_with_offset() {
         let instructions = vec![0x60A1, 0xB521];
         let rom = Rom::from_raw_instructions(&instructions);
-        let mut cpu = Cpu::from_rom(rom).unwrap();
+        let mut cpu = Cpu::<MockKeypad>::from_rom(rom).unwrap();
 
         cpu.tick().unwrap();
         cpu.tick().unwrap();
@@ -1061,7 +1091,7 @@ mod tests {
     fn correctly_handle_fx18_load_sound_timer() {
         let instructions = vec![0x65A1, 0xF518];
         let rom = Rom::from_raw_instructions(&instructions);
-        let mut cpu = Cpu::from_rom(rom).unwrap();
+        let mut cpu = Cpu::<MockKeypad>::from_rom(rom).unwrap();
 
         cpu.tick().unwrap();
         cpu.tick().unwrap();
@@ -1073,7 +1103,7 @@ mod tests {
     fn correctly_handle_fx15_load_delay_timer() {
         let instructions = vec![0x65A1, 0xF515];
         let rom = Rom::from_raw_instructions(&instructions);
-        let mut cpu = Cpu::from_rom(rom).unwrap();
+        let mut cpu = Cpu::<MockKeypad>::from_rom(rom).unwrap();
 
         cpu.tick().unwrap();
         cpu.tick().unwrap();
@@ -1085,12 +1115,90 @@ mod tests {
     fn correctly_handle_fx07_load_register_from_delay_timer() {
         let instructions = vec![0xF607];
         let rom = Rom::from_raw_instructions(&instructions);
-        let mut cpu = Cpu::from_rom(rom).unwrap();
+        let mut cpu = Cpu::<MockKeypad>::from_rom(rom).unwrap();
 
         cpu.delay_timer = 0xF1;
 
         cpu.tick().unwrap();
 
         assert_eq!(0xF1, cpu.registers.get_value(U4::new(6)));
+    }
+
+    #[test]
+    fn correctly_handle_fx0a_wait_for_key_press() {
+        let instructions = vec![0xF60A];
+        let rom = Rom::from_raw_instructions(&instructions);
+        let mut cpu = Cpu::<MockKeypad>::from_rom(rom).unwrap();
+
+        cpu.tick().unwrap();
+        cpu.tick().unwrap();
+
+        assert_eq!(
+            0x200, *cpu.program_counter,
+            "PC must not advance while waiting for input"
+        );
+
+        cpu.keypad.value = Some(1);
+        cpu.tick().unwrap();
+
+        assert_eq!(
+            0x202, *cpu.program_counter,
+            "PC must advance after receiving an input"
+        );
+        assert_eq!(
+            0x1,
+            cpu.registers.get_value(U4::new(6)),
+            "Register must be set to the value of the pressed key"
+        );
+    }
+
+    #[test]
+    fn correctly_handle_fx9e_skip_if_key_pressed() {
+        let instructions = vec![0x660A, 0xE69E, 0xE69E];
+
+        let rom = Rom::from_raw_instructions(&instructions);
+        let mut cpu = Cpu::<MockKeypad>::from_rom(rom).unwrap();
+        cpu.keypad.value = Some(0x6);
+
+        cpu.tick().unwrap();
+        cpu.tick().unwrap();
+
+        assert_eq!(
+            0x204, *cpu.program_counter,
+            "Should not skip if the pressed key is different from the register value"
+        );
+
+        cpu.keypad.value = Some(0xA);
+        cpu.tick().unwrap();
+
+        assert_eq!(
+            0x208, *cpu.program_counter,
+            "Should skip if the pressed key is different from the register value"
+        );
+    }
+
+    #[test]
+    fn correctly_handle_fx9e_skip_if_key_not_pressed() {
+        let instructions = vec![0x660A, 0xE6A1, 0xE6A1];
+
+        let rom = Rom::from_raw_instructions(&instructions);
+        let mut cpu = Cpu::<MockKeypad>::from_rom(rom).unwrap();
+        cpu.keypad.value = Some(0xA);
+
+        cpu.tick().unwrap();
+        cpu.tick().unwrap();
+
+        assert_eq!(
+            0x204, *cpu.program_counter,
+            "Should not skip if the pressed key is the same as the register value"
+        );
+
+        cpu.keypad.value = Some(0x6);
+        cpu.tick().unwrap();
+
+        assert_eq!(
+            0x208, *cpu.program_counter,
+            "Should skip if the pressed key is different from the register value"
+        );
     }
 }

@@ -9,6 +9,7 @@ use display::Display;
 use egui_extras::{Column, TableBuilder};
 use egui_macroquad::egui;
 use instruction::Instruction;
+use keypad::Keypad;
 use memory::{MemoryAddress, MEMORY_START};
 use rom::Rom;
 
@@ -16,11 +17,72 @@ mod bits;
 mod cpu;
 mod display;
 mod instruction;
+mod keypad;
 mod rom;
 
 use macroquad::prelude::*;
 
 use crate::{bits::join_bytes, memory::MEMORY_SIZE};
+
+struct MacroquadKeypad {
+    keys: Vec<KeyCode>,
+    values: Vec<u8>,
+}
+
+impl Default for MacroquadKeypad {
+    fn default() -> Self {
+        Self {
+            keys: vec![
+                KeyCode::Key1,
+                KeyCode::Key2,
+                KeyCode::Key3,
+                KeyCode::Key4,
+                KeyCode::Q,
+                KeyCode::W,
+                KeyCode::E,
+                KeyCode::R,
+                KeyCode::A,
+                KeyCode::S,
+                KeyCode::D,
+                KeyCode::F,
+                KeyCode::Z,
+                KeyCode::X,
+                KeyCode::C,
+                KeyCode::V,
+            ],
+            values: vec![1, 2, 3, 12, 4, 5, 6, 13, 7, 8, 9, 14, 10, 0, 11, 15],
+        }
+    }
+}
+
+impl MacroquadKeypad {
+    fn convert_keycode(&self, key: KeyCode) -> Option<u8> {
+        let Some(idx) = self.keys.iter().position(|&k| k == key) else {
+            return None;
+        };
+
+        Some(self.values[idx])
+    }
+
+    fn convert_value(&self, value: u8) -> KeyCode {
+        let idx = self.values.iter().position(|&v| v == value).unwrap();
+        self.keys[idx]
+    }
+}
+
+impl Keypad for MacroquadKeypad {
+    fn is_key_down(&self, value: u8) -> bool {
+        let key = self.convert_value(value);
+        macroquad::input::is_key_down(key)
+    }
+
+    fn get_pressed_key(&self) -> Option<u8> {
+        let Some(key) = macroquad::input::get_last_key_pressed() else {
+            return None;
+        };
+        self.convert_keycode(key)
+    }
+}
 
 #[derive(PartialEq)]
 enum CpuExecution {
@@ -29,7 +91,7 @@ enum CpuExecution {
 }
 
 struct UiState {
-    cpu: Cpu,
+    cpu: Cpu<MacroquadKeypad>,
     execution: CpuExecution,
     current_rom: String,
     has_failed: bool,
@@ -132,7 +194,14 @@ async fn main() {
         "./roms/ibm-logo.ch8",
         "./roms/SCTEST.ch8",
         "./roms/bc_test.ch8",
-        "./roms/xxx.ch8",
+        "./roms/test_suite/1-chip8-logo.ch8",
+        "./roms/test_suite/2-ibm-logo.ch8",
+        "./roms/test_suite/3-corax+.ch8",
+        "./roms/test_suite/4-flags.ch8",
+        "./roms/test_suite/5-quirks.ch8",
+        "./roms/test_suite/6-keypad.ch8",
+        "./roms/test_suite/7-beep.ch8",
+        "./roms/test_suite/8-scrolling.ch8",
     ];
     let mut state = UiState::default();
 
@@ -155,9 +224,9 @@ async fn main() {
                     ui.separator();
                     draw_instructions(ui, &mut state);
                     ui.separator();
-                    draw_register_grid(ui, &state.cpu);
+                    draw_register_grid(ui, &state);
                     ui.separator();
-                    draw_stack(ui, &state.cpu);
+                    draw_stack(ui, &state);
                 });
 
             egui::SidePanel::left("Roms")
@@ -374,23 +443,23 @@ fn byte_to_char(byte: u8) -> char {
     '.'
 }
 
-fn draw_register_grid(ui: &mut egui::Ui, cpu: &Cpu) {
+fn draw_register_grid(ui: &mut egui::Ui, state: &UiState) {
     ui.heading("Registers");
     egui::Grid::new("registers")
         .num_columns(4)
         .spacing([40.0, 4.0])
         .striped(true)
-        .show(ui, |ui| draw_register_grid_content(ui, &cpu));
+        .show(ui, |ui| draw_register_grid_content(ui, state));
 }
 
-fn draw_stack(ui: &mut egui::Ui, cpu: &Cpu) {
+fn draw_stack(ui: &mut egui::Ui, state: &UiState) {
     ui.heading("Stack");
     egui::Grid::new("stack")
         .num_columns(2)
         .spacing([40.0, 4.0])
         .striped(true)
         .show(ui, |ui| {
-            for (index, address) in cpu.stack.iter().enumerate() {
+            for (index, address) in state.cpu.stack.iter().enumerate() {
                 ui.label(format!("{:>2}", index));
                 ui.label(format!("{:0>4}", **address));
                 ui.end_row();
@@ -534,7 +603,8 @@ fn draw_instructions(ui: &mut egui::Ui, state: &mut UiState) {
         });
 }
 
-fn draw_register_grid_content(ui: &mut egui::Ui, cpu: &Cpu) {
+fn draw_register_grid_content(ui: &mut egui::Ui, state: &UiState) {
+    let cpu = &state.cpu;
     ui.label("PC:");
     ui.label(format!("{:0>4X}", *cpu.program_counter));
 
@@ -773,8 +843,8 @@ mod tests {
     fn compute_byte_indexes_to_highlight_correclty_finds_indexes() {
         let instructions = vec![0x6500, 0x6402];
 
-        let cpu = Cpu::from_rom(Rom::from_raw_instructions(&instructions)).unwrap();
-
+        let cpu =
+            Cpu::<MacroquadKeypad>::from_rom(Rom::from_raw_instructions(&instructions)).unwrap();
         let bytes = cpu.memory.read_slice(MEMORY_START, 10).unwrap();
 
         let filter = "2";
