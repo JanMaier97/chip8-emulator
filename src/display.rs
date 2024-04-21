@@ -25,7 +25,7 @@ impl Display {
         let mut has_turned_of_any_pixel = false;
         for (row_idx, &sprite_row) in sprite.into_iter().enumerate() {
             let current_y = y_pos + row_idx;
-            if current_y > DISPLAY_HEIGHT {
+            if current_y >= DISPLAY_HEIGHT {
                 break;
             }
 
