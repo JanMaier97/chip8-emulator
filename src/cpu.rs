@@ -130,6 +130,7 @@ impl<T: Keypad + Default> Cpu<T> {
                 let value1 = self.registers.get_value(register1);
                 let value2 = self.registers.get_value(register2);
                 self.registers.set_value(register1, value1 & value2);
+                self.registers.set_value(U4::new(0xF), 0);
             }
             Instruction::CallSubroutine(addr) => {
                 self.stack.push(self.program_counter);
@@ -192,6 +193,7 @@ impl<T: Keypad + Default> Cpu<T> {
                 let value1 = self.registers.get_value(register1);
                 let value2 = self.registers.get_value(register2);
                 self.registers.set_value(register1, value1 | value2);
+                self.registers.set_value(U4::new(0xF), 0);
             }
             Instruction::Random { register, mask } => {
                 let rnd = rand::thread_rng().gen::<u8>();
@@ -297,6 +299,7 @@ impl<T: Keypad + Default> Cpu<T> {
                 let value1 = self.registers.get_value(register1);
                 let value2 = self.registers.get_value(register2);
                 self.registers.set_value(register1, value1 ^ value2);
+                self.registers.set_value(U4::new(0xF), 0);
             }
         }
 
